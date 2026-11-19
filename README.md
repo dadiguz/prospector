@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Prospector
 
-## Getting Started
+A local tool for sales prospecting. It finds prospects with verifiable evidence, drafts short emails from a proven template, sends them through your Gmail only after you approve them, tracks replies, and shows which kinds of prospects respond.
 
-First, run the development server:
+The interface is in Spanish. Everything runs on your computer. Your data and keys never go into this repository.
+
+## What you need
+
+- Node.js 22.13 or newer
+- A Claude API key (from console.anthropic.com), for finding prospects and classifying replies
+- A Google Workspace account, to connect Gmail
+
+## Setup
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://127.0.0.1:4321 and:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Fill in your profile** (name, work email, phone, company). It is used as the sender and in your messages.
+2. **Ajustes (Settings) → API key de Claude**: paste your key. It is checked and saved in your system keychain.
+3. **Ajustes → Gmail**: follow the links shown there to create a free OAuth client in Google Cloud (no credit card needed):
+   - create a project,
+   - enable the Gmail API,
+   - set up the consent screen as **Internal**,
+   - create an OAuth client of type **Desktop app**.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   Paste the Client ID and Client secret, then click **Conectar con Google**.
 
-## Learn More
+Each person uses their own API key and their own Gmail.
 
-To learn more about Next.js, take a look at the following resources:
+## Projects
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The repo ships with no projects. A project is a Markdown file with what you sell, what you can and cannot claim, the scoring profile, segments and email templates.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Import**: on the home page, choose the `.md` file and click **Importar proyecto**. Importing again updates the setup and keeps your prospects and messages.
+- **Start from scratch**: click **Descargar plantilla .md**, fill it in and import it.
+- **Share**: on a project page, click **Exportar .md**. The file has no prospects or personal data.
 
-## Deploy on Vercel
+## How it works
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Project**: what you sell, what you can and cannot claim, segments to search.
+- **Prospects**: search results in four lists (verified email, weaker, WhatsApp only, discarded), each with its evidence.
+- **Drafts**: review and edit. Nothing is sent until you confirm.
+- **Replies**: synced from Gmail and classified, with an analysis of what is working.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Each search has a spending cap in US dollars (set in Ajustes).
+
+## Where your data lives
+
+Outside the repo, in `~/.prospector` (Mac/Linux) or `%APPDATA%\Prospector` (Windows): the database, your profile and your settings. Keys and Gmail tokens are stored in the system keychain. Back up that folder; never commit it.
