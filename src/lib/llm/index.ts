@@ -49,6 +49,28 @@ async function client(): Promise<Anthropic> {
   return new Anthropic({ apiKey, maxRetries: 2 });
 }
 
+/** Motivos de error de la lectura web, en palabras del usuario. */
+const FETCH_ERRORS: Record<string, string> = {
+  url_not_in_prior_context: "la dirección no salió de una búsqueda ni de un enlace (el modelo la adivinó)",
+  url_not_accessible: "el sitio no respondió o bloquea la lectura automática",
+  url_not_allowed: "sitio bloqueado en este proyecto",
+  unsupported_content_type: "tipo de archivo no soportado",
+  too_many_requests: "el sitio pidió esperar",
+  max_uses_exceeded: "se alcanzó el tope de lecturas para este prospecto",
+  content_too_large: "la página es demasiado grande",
+  url_too_long: "la dirección es demasiado larga",
+  unavailable: "el servicio de lectura no está disponible",
+  invalid_tool_input: "dirección mal formada",
+};
+
+const SEARCH_ERRORS: Record<string, string> = {
+  invalid_tool_input: "consulta mal formada; el modelo la reintenta",
+  query_too_long: "consulta demasiado larga",
+  max_uses_exceeded: "se alcanzó el tope de búsquedas para este prospecto",
+  too_many_requests: "demasiadas búsquedas seguidas",
+  unavailable: "el servicio de búsqueda no está disponible",
+};
+
 /** Llamada mínima para validar la llave: listar un modelo no consume tokens. */
 export async function validateApiKey(apiKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
@@ -156,8 +178,11 @@ export async function research(opts: {
           } else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) {
             avisar(`${b.content.length} resultados encontrados`);
           } else if (b.type === "web_fetch_tool_result") {
-            const err = (b.content as { type?: string; error_code?: string })?.type?.includes("error");
-            if (err) avisar("La página no se pudo leer; sigue con otra fuente");
+            const c = b.content as { type?: string; error_code?: string; url?: string };
+            if (c?.type?.includes("error")) avisar(`No se pudo leer: ${FETCH_ERRORS[c.error_code ?? ""] ?? c.error_code ?? "error desconocido"}`);
+          } else if (b.type === "web_search_tool_result" && !Array.isArray(b.content)) {
+            const c = b.content as { error_code?: string };
+            avisar(`La búsqueda falló: ${SEARCH_ERRORS[c.error_code ?? ""] ?? c.error_code ?? "error desconocido"}`);
           }
         });
       }
