@@ -5,7 +5,7 @@ import { getProject, projectDetail } from "@/lib/queries";
 import { json } from "@/lib/db";
 import { hookFigure, mxn } from "@/lib/hook-formula";
 import { readSettings } from "@/lib/profile";
-import { PageTitle, Section, Fold, Badge } from "@/components/ui";
+import { PageTitle, Section, Fold, Badge, TagChip } from "@/components/ui";
 import { AutoRefresh, ActionButton } from "@/components/client";
 import { cancelJob } from "@/app/actions";
 import { SearchForm } from "./search-form";
@@ -67,6 +67,12 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
                     </p>
                   </div>
                   <Activity json={j.actividad_json} live={j.estado === "en_curso"} />
+                  {j.tag_id && j.encontrados > 0 && (
+                    <Link href={`/proyectos/${project.slug}/prospectos?tag=${j.tag_id}&todos=1`} className="flex items-center gap-2 text-sm">
+                      <TagChip nombre={j.tag_nombre ?? "Resultados"} color={j.tag_color ?? "pizarra"} count={j.encontrados} />
+                      <span className="text-accent underline-offset-4 hover:underline">Ver resultados</span>
+                    </Link>
+                  )}
                   {["pendiente", "en_curso", "en_pausa"].includes(j.estado) && (
                     <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
                       Cancelar

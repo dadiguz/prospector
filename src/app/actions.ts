@@ -16,6 +16,7 @@ import * as gmailApi from "@/lib/gmail/api";
 import { syncReplies } from "@/lib/gmail/sync";
 import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
 import { improveText, CAMPOS, type Campo } from "@/lib/wand";
+import { tagProspect, userTag } from "@/lib/tags";
 import { startSearchJob, cancelJob as cancelJobImpl } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string> } | null;
@@ -76,8 +77,10 @@ export async function saveSettings(_: FormState, fd: FormData): Promise<FormStat
 
 export async function createDraft(prospectId: number): Promise<FormState> {
   const profile = requireProfile();
-  const p = get<{ project_id: number; estado: string }>("SELECT project_id, estado FROM prospects WHERE id = ?", prospectId);
+  const p = get<{ project_id: number; estado: string; lista: string }>("SELECT project_id, estado, lista FROM prospects WHERE id = ?", prospectId);
   if (!p) return { error: "Prospecto no encontrado." };
+  if (p.lista === "descartado") return { error: "está descartado." };
+  if (!["investigado", "en_espera"].includes(p.estado)) return { error: p.estado === "borrador" ? "ya tiene borrador." : "ya fue contactado." };
   if (get("SELECT 1 FROM messages WHERE prospect_id = ? AND estado IN ('borrador','aprobado')", prospectId))
     return { error: "Ya tiene un borrador." };
   const d = buildDraft(prospectId, profile);
@@ -488,4 +491,42 @@ export async function improveField(campo: string, etiqueta: string, valor: strin
     if (e instanceof NoApiKeyError) return { error: "Agrega tu API key de Claude en Ajustes para usar la varita." };
     return { error: `No se pudo mejorar: ${(e as Error).message}` };
   }
+}
+
+/* ---------- Acciones por lote y etiquetas ---------- */
+
+/** Crea borradores para los prospectos seleccionados; reporta los que se saltó y por qué. */
+export async function createDraftsBulk(prospectIds: number[]): Promise<FormState & { creados?: number }> {
+  const ids = z.array(z.number().int()).max(200).parse(prospectIds);
+  let creados = 0;
+  const saltados: string[] = [];
+  for (const id of ids) {
+    const r = await createDraft(id);
+    if (r?.ok) creados++;
+    else {
+      const n = get<{ nombre: string }>("SELECT o.nombre FROM prospects p JOIN organizations o ON o.id = p.organization_id WHERE p.id = ?", id)?.nombre ?? `#${id}`;
+      saltados.push(`${n}: ${r?.error ?? "no se pudo"}`);
+    }
+  }
+  refresh();
+  return {
+    ok: creados > 0,
+    creados,
+    message: creados ? `${creados} borrador(es) creado(s).` : undefined,
+    error: saltados.length ? `${saltados.length} omitido(s): ${saltados.slice(0, 5).join(" · ")}${saltados.length > 5 ? " · …" : ""}` : undefined,
+  };
+}
+
+export async function tagProspects(projectId: number, prospectIds: number[], nombre: string): Promise<FormState> {
+  const ids = z.array(z.number().int()).min(1).max(500).parse(prospectIds);
+  if (!nombre.trim()) return { error: "Escribe el nombre de la etiqueta." };
+  const labelId = userTag(projectId, nombre);
+  for (const id of ids) if (get("SELECT 1 FROM prospects WHERE id = ? AND project_id = ?", id, projectId)) tagProspect(id, labelId);
+  refresh();
+  return { ok: true, message: `Etiqueta “${nombre.trim()}” aplicada a ${ids.length}.` };
+}
+
+export async function untagProspect(prospectId: number, labelId: number) {
+  run("DELETE FROM label_links WHERE prospect_id = ? AND label_id = ? AND label_id IN (SELECT id FROM labels WHERE tipo = 'usuario')", prospectId, labelId);
+  refresh();
 }

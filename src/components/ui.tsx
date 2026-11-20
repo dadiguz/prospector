@@ -91,3 +91,49 @@ export const CLASIF_LABEL: Record<string, { label: string; tone: keyof typeof TO
   baja: { label: "Pidió baja", tone: "bad" },
   otro: { label: "Revisar", tone: "warn" },
 };
+
+/* Etiquetas de color (búsquedas, tandas y etiquetas propias). */
+const TAG_STYLE: Record<string, { bg: string; fg: string }> = {
+  terracota: { bg: "#F6E4DB", fg: "#A34E2F" },
+  salvia: { bg: "#E3EEE4", fg: "#3F6B4B" },
+  azul: { bg: "#E1EAF5", fg: "#33568A" },
+  ocre: { bg: "#F5ECD3", fg: "#85631D" },
+  ciruela: { bg: "#EEE2EE", fg: "#6E3D6E" },
+  petroleo: { bg: "#DDEDEC", fg: "#2C6662" },
+  rosa: { bg: "#F7E1E6", fg: "#9A3D55" },
+  oliva: { bg: "#ECEEDC", fg: "#5C6224" },
+  pizarra: { bg: "#E7E8EB", fg: "#4B5160" },
+  arena: { bg: "#F1EBE2", fg: "#6D5A44" },
+};
+
+export function TagChip({ nombre, color, active, count }: { nombre: string; color: string; active?: boolean; count?: number }) {
+  const s = TAG_STYLE[color] ?? TAG_STYLE.pizarra;
+  return (
+    <span
+      className="inline-flex max-w-[18rem] items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+      style={{ background: s.bg, color: s.fg, boxShadow: active ? `inset 0 0 0 1.5px ${s.fg}` : undefined }}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: s.fg }} aria-hidden="true" />
+      <span className="truncate">{nombre}</span>
+      {count != null && <span className="opacity-60">{count}</span>}
+    </span>
+  );
+}
+
+/** Barra de filtro por etiqueta: enlaces que conservan los demás parámetros. */
+export function TagFilter({ tags, active, hrefFor }: { tags: { id: number; nombre: string; color: string; total?: number }[]; active: number | null; hrefFor: (id: number | null) => string }) {
+  if (!tags.length) return null;
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 text-xs text-ink-3">Etiquetas</span>
+      {tags.map((t) => (
+        <a key={t.id} href={hrefFor(active === t.id ? null : t.id)} className={active && active !== t.id ? "opacity-50 hover:opacity-100" : ""}>
+          <TagChip nombre={t.nombre} color={t.color} active={active === t.id} count={t.total} />
+        </a>
+      ))}
+      {active && (
+        <a href={hrefFor(null)} className="ml-1 text-xs text-ink-2 underline underline-offset-4">Quitar filtro</a>
+      )}
+    </div>
+  );
+}

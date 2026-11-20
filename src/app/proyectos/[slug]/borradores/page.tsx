@@ -3,15 +3,20 @@ import { notFound } from "next/navigation";
 import { getProject, listDrafts } from "@/lib/queries";
 import { readProfile, readSettings } from "@/lib/profile";
 import { json } from "@/lib/db";
-import { PageTitle, Empty } from "@/components/ui";
+import { PageTitle, Empty, TagFilter } from "@/components/ui";
+import { projectTags, tagsByProspect } from "@/lib/tags";
 import { DraftsBoard } from "./board";
 import { gmailStatus } from "@/lib/gmail/oauth";
 
-async function BorradoresContent({ params }: PageProps<"/proyectos/[slug]/borradores">) {
+async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos/[slug]/borradores">) {
   const { slug } = await params;
+  const sp = await searchParams;
   const project = await getProject(slug);
   if (!project) notFound();
-  const { drafts, enviadosHoy } = await listDrafts(project.id);
+  const tags = projectTags(project.id);
+  const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
+  const { drafts, enviadosHoy } = await listDrafts(project.id, tagId);
+  const tagMap = tagsByProspect(drafts.map((d) => d.prospect_id));
   const profile = readProfile();
   const settings = readSettings();
   const gmail = await gmailStatus();
@@ -20,8 +25,9 @@ async function BorradoresContent({ params }: PageProps<"/proyectos/[slug]/borrad
   return (
     <>
       <PageTitle sub="Revisa, edita y manda. Nada sale sin que tú lo decidas.">Borradores</PageTitle>
+      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} />
       {drafts.length === 0 ? (
-        <Empty>No hay borradores. Créalos desde Prospectos, en la lista A.</Empty>
+        <Empty>{tagId ? "No hay borradores con esta etiqueta." : "No hay borradores. Créalos desde Prospectos: selecciona y pulsa “Crear borradores”."}</Empty>
       ) : (
         <DraftsBoard
           projectId={project.id}
@@ -37,6 +43,7 @@ async function BorradoresContent({ params }: PageProps<"/proyectos/[slug]/borrad
               score: d.score,
               pegas: typeof f.pegas === "string" ? f.pegas : null,
               cuando: typeof f.cuando_mandar === "string" ? f.cuando_mandar : null,
+              tags: tagMap.get(d.prospect_id) ?? [],
             };
           })}
           remitente={gmail.conectado ? gmail.email ?? "" : profile?.correo ?? ""}

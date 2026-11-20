@@ -356,4 +356,14 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, actualizado_en TEXT 
 ALTER TABLE jobs ADD COLUMN actividad_json TEXT NOT NULL DEFAULT '[]';
 `,
   },
+  {
+    id: 5,
+    name: "etiquetas",
+    sql: /* sql */ `
+ALTER TABLE labels ADD COLUMN color TEXT;
+ALTER TABLE labels ADD COLUMN search_run_id INTEGER REFERENCES search_runs(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX labels_run ON labels(search_run_id) WHERE search_run_id IS NOT NULL;
+CREATE UNIQUE INDEX label_links_prospect ON label_links(label_id, prospect_id) WHERE prospect_id IS NOT NULL;
+`,
+  },
 ];

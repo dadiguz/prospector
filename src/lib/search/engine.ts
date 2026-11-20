@@ -7,6 +7,7 @@ import { readSettings } from "../profile";
 import { contactBlocker } from "../drafts";
 import { score as scoreFn, type Weight } from "../scoring";
 import { currentWeights } from "../project-md";
+import { ensureRunTag, tagProspect } from "../tags";
 import { hookFigure } from "../hook-formula";
 import { detectEstado, domainOf, isFreeMail, mailboxType, norm } from "../text";
 
@@ -132,6 +133,7 @@ export async function startSearchJob(segmentId: number, cuantos: number, presupu
         seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
     );
     run("INSERT INTO job_steps (job_id, orden, tipo, clave) VALUES (?, 0, 'descubrir', 'descubrir')", id);
+    ensureRunTag(runId);
     return id;
   });
   audit("owner", "busqueda_iniciada", `job ${jobId}, segmento ${segmentId}, ${cuantos} sólidos, US$${presupuestoUsd}`);
@@ -190,7 +192,10 @@ async function runJob(jobId: number) {
       const listos = get<{ c: number }>("SELECT COUNT(*) c FROM prospects WHERE search_run_id = ? AND lista = 'A'", job.search_run_id)!.c;
 
       if (listos >= budget.cuantos) return finish(jobId, "hecho", `Listo: ${listos} sólidos en la lista A. Gasto estimado US$${gastado.toFixed(2)}.`);
-      if (gastado >= budget.usd)
+      // Tope de gasto: no empieza un paso si, con lo que cuesta en promedio un paso, se pasaría.
+      const hechos = get<{ c: number }>("SELECT COUNT(*) c FROM job_steps WHERE job_id = ? AND estado = 'hecho'", jobId)!.c;
+      const promedio = hechos ? gastado / hechos : 0;
+      if (gastado + promedio > budget.usd)
         return finish(jobId, "hecho", `Presupuesto agotado (US$${gastado.toFixed(2)} de US$${budget.usd}). Entregados ${listos} de ${budget.cuantos}; los candidatos sin revisar quedaron omitidos.`);
 
       const step = get<{ id: number; tipo: string; clave: string; entrada_json: string; intentos: number }>(
@@ -405,6 +410,7 @@ async function savePropsect(projectId: number, runId: number, segmentId: number,
     if (correo)
       run("INSERT INTO contacts (organization_id, canal, valor, tipo_buzon, url_fuente, fecha_visto, mx_ok, estado) VALUES (?, 'correo', ?, ?, ?, date('now'), ?, ?)",
         orgId, correo, mailboxType(correo), f.fuente_del_correo, mx == null ? null : mx ? 1 : 0, correoOk ? "valido" : "no_usar");
+    tagProspect(pid, ensureRunTag(runId));
     if (f.whatsapp) run("INSERT INTO contacts (organization_id, canal, valor, fecha_visto) VALUES (?, 'whatsapp', ?, date('now'))", orgId, f.whatsapp);
     if (f.instagram) run("INSERT INTO contacts (organization_id, canal, valor, fecha_visto) VALUES (?, 'instagram', ?, date('now'))", orgId, f.instagram);
     for (const e of f.evidencia)

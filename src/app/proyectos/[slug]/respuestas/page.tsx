@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getProject, listReplies } from "@/lib/queries";
 import { responseAnalysis } from "@/lib/analysis";
-import { PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL } from "@/components/ui";
+import { PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL, TagChip, TagFilter } from "@/components/ui";
+import { projectTags, tagsByProspect } from "@/lib/tags";
 import { ReplyForm, SuggestButton, SyncButton, ReviewReply } from "./client";
 import { gmailStatus } from "@/lib/gmail/oauth";
 import { CopyButton } from "@/components/client";
@@ -10,11 +11,15 @@ import { CopyButton } from "@/components/client";
 const ORDER = ["interesado", "acuse", "otro", "no_ahora", "no", "baja", "rebote", "auto_respuesta", "vacia"];
 const pct = (x: number) => `${(x * 100).toFixed(x > 0 && x < 0.1 ? 1 : 0)}%`;
 
-async function RespuestasContent({ params }: PageProps<"/proyectos/[slug]/respuestas">) {
+async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos/[slug]/respuestas">) {
   const { slug } = await params;
+  const sp = await searchParams;
   const project = await getProject(slug);
   if (!project) notFound();
-  const { replies, sinRespuesta, retomar } = await listReplies(project.id);
+  const tags = projectTags(project.id);
+  const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
+  const { replies, sinRespuesta, retomar } = await listReplies(project.id, tagId);
+  const tagMap = tagsByProspect(replies.map((r) => r.prospect_id));
   const a = responseAnalysis(project.id);
   const gmail = await gmailStatus();
   const sorted = [...replies].sort((x, y) => ORDER.indexOf(x.clasificacion) - ORDER.indexOf(y.clasificacion));
@@ -23,6 +28,7 @@ async function RespuestasContent({ params }: PageProps<"/proyectos/[slug]/respue
     <>
       <PageTitle sub="Clasificadas por tipo, con una sugerencia de respuesta en el tono del prospecto.">Respuestas</PageTitle>
 
+      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} />
       <div className="card mb-10 grid grid-cols-2 gap-6 p-6 sm:grid-cols-5">
         <Stat label="Enviados" value={a.total.enviados} />
         <Stat label="Entregados" value={a.total.entregados} />
@@ -47,6 +53,7 @@ async function RespuestasContent({ params }: PageProps<"/proyectos/[slug]/respue
                         <span className="font-medium">{r.nombre}</span>
                         <Badge tone={l.tone}>{l.label}</Badge>
                         {r.pide && r.pide !== "nada" && <Badge tone="accent">Pide {r.pide === "info" ? "información" : r.pide}</Badge>}
+                        {(tagMap.get(r.prospect_id) ?? []).map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}
                       </div>
                       <p className="mt-1 text-sm">{r.resumen}</p>
                       <p className="mt-1 text-xs text-ink-3">

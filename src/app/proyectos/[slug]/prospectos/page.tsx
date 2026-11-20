@@ -7,8 +7,10 @@ import { readProfile } from "@/lib/profile";
 import { mxn } from "@/lib/hook-formula";
 import { firstPhone, waLink } from "@/lib/whatsapp";
 import { render } from "@/lib/drafts";
-import { PageTitle, Badge, Assumable, Empty, ESTADO_LABEL } from "@/components/ui";
+import { PageTitle, Badge, Assumable, Empty, ESTADO_LABEL, TagChip, TagFilter } from "@/components/ui";
 import { ProspectActions } from "./actions-client";
+import { BulkBar, RowCheckbox } from "./bulk";
+import { projectTags, tagsByProspect } from "@/lib/tags";
 
 const LISTAS = [
   { key: "A", label: "A · Correo verificado" },
@@ -42,9 +44,25 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   const sp = await searchParams;
   const project = await getProject(slug);
   if (!project) notFound();
-  const lista = LISTAS.some((l) => l.key === sp.lista) ? (sp.lista as string) : "A";
+  const tags = projectTags(project.id);
+  const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
   const todos = sp.todos === "1";
-  const { rows, counts } = await listProspects(project.id, lista, !todos && lista !== "descartado");
+  let lista = LISTAS.some((l) => l.key === sp.lista) ? (sp.lista as string) : "A";
+  if (!sp.lista && tagId) {
+    // Desde "Ver resultados": abrir la primera lista con prospectos de esa búsqueda.
+    const { counts: c0 } = await listProspects(project.id, "A", false, tagId);
+    lista = LISTAS.find((l) => (c0.find((x) => x.lista === l.key)?.total ?? 0) > 0)?.key ?? "A";
+  }
+  const { rows, counts } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId);
+  const tagMap = tagsByProspect(rows.map((r) => r.id));
+  const qs = (o: { lista?: string; todos?: boolean; tag?: number | null }) => {
+    const p = new URLSearchParams();
+    p.set("lista", o.lista ?? lista);
+    if (o.todos ?? todos) p.set("todos", "1");
+    const t = o.tag === undefined ? tagId : o.tag;
+    if (t) p.set("tag", String(t));
+    return `?${p}`;
+  };
   const profile = readProfile();
   const waTpl = get<{ cuerpo: string }>("SELECT cuerpo FROM templates WHERE project_id = ? AND canal = 'whatsapp' LIMIT 1", project.id)?.cuerpo;
   const ids = rows.map((r) => r.id);
@@ -56,6 +74,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <PageTitle sub="Ordenados por probabilidad de respuesta. Abre una fila para ver la evidencia.">Prospectos</PageTitle>
+      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}&todos=1` : qs({ tag: null }))} />
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {LISTAS.map((l) => {
           const c = counts.find((x) => x.lista === l.key);
@@ -63,7 +82,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
           return (
             <Link
               key={l.key}
-              href={`?lista=${l.key}${todos ? "&todos=1" : ""}`}
+              href={qs({ lista: l.key })}
               className={`btn ${lista === l.key ? "border-ink" : "btn-quiet"}`}
             >
               {l.label} <span className="text-ink-3">{n}</span>
@@ -71,7 +90,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
           );
         })}
         {lista !== "descartado" && (
-          <Link href={`?lista=${lista}${todos ? "" : "&todos=1"}`} className="ml-auto text-sm text-ink-2 underline-offset-4 hover:underline">
+          <Link href={qs({ todos: !todos })} className="ml-auto text-sm text-ink-2 underline-offset-4 hover:underline">
             {todos ? "Solo por revisar" : "Ver también contactados"}
           </Link>
         )}
@@ -82,6 +101,8 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
           {todos || lista === "descartado" ? "No hay prospectos en esta lista." : "Nada por revisar aquí. Lanza una búsqueda desde la página del proyecto."}
         </Empty>
       ) : (
+        <>
+        <BulkBar projectId={project.id} slug={project.slug} tagId={tagId} total={rows.length} />
         <ul className="card divide-y divide-line">
           {rows.map((r) => {
             const f = json<Record<string, unknown>>(r.ficha_json, {});
@@ -104,9 +125,17 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
               <li key={r.id}>
                 <details className="group">
                   <summary className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-4 hover:bg-[#fcfbf8] sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto_auto]">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{r.nombre}</div>
-                      <div className="truncate text-xs text-ink-2">{[str(f.lugar) || r.ciudad, r.estado_mx].filter(Boolean).join(" · ") || "Sin ubicación"}</div>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <RowCheckbox id={r.id} />
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{r.nombre}</div>
+                        <div className="truncate text-xs text-ink-2">{[str(f.lugar) || r.ciudad, r.estado_mx].filter(Boolean).join(" · ") || "Sin ubicación"}</div>
+                        {(tagMap.get(r.id) ?? []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(tagMap.get(r.id) ?? []).map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="hidden min-w-0 truncate text-sm text-ink-2 sm:block" title={dolor}>
                       {lista === "descartado" ? r.motivo_descarte : dolor || "—"}
@@ -146,8 +175,8 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
                       <div>
                         <p className="mb-1 text-ink-2">Evidencia</p>
                         <ul className="space-y-1">
-                          {(ev.length ? ev : fuentes.map((raw) => ({ url: raw.split(/\s+/)[0], que_demuestra: raw.split(/\s+/).slice(1).join(" "), cita: null, tipo: "verificado" }))).map((e) => (
-                            <li key={e.url} className="break-all">
+                          {(ev.length ? ev : fuentes.map((raw) => ({ url: raw.split(/\s+/)[0], que_demuestra: raw.split(/\s+/).slice(1).join(" "), cita: null, tipo: "verificado" }))).map((e, i) => (
+                            <li key={`${i}-${e.url}`} className="break-all">
                               <a href={e.url} target="_blank" rel="noreferrer noopener" className="text-accent underline-offset-4 hover:underline">{e.url}</a>
                               {e.que_demuestra && <span className="text-ink-2"> · {e.que_demuestra}</span>}
                               {e.tipo === "suposicion" && <mark className="suposicion ml-1">SUPOSICIÓN</mark>}
@@ -170,6 +199,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
             );
           })}
         </ul>
+        </>
       )}
     </>
   );

@@ -4,8 +4,9 @@ import { useState, useTransition } from "react";
 import { discardDraft, markSent, pushDraftsToGmail, sendTestToMe, sendViaGmail, updateDraft, type FormState } from "@/app/actions";
 import { ActionButton, CopyButton, FormMessage, StatefulForm } from "@/components/client";
 import type { Issue } from "@/lib/validator";
+import { TagChip } from "@/components/ui";
 
-type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null };
+type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[] };
 
 export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remitente: string; gmailConectado: boolean; etiqueta: string; tope: number; enviadosHoy: number }) {
   const { drafts } = props;
@@ -101,6 +102,9 @@ function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean;
           <span className="min-w-0">
             <span className="block font-medium">{d.nombre}</span>
             <span className="block font-mono text-xs text-ink-2">{d.para ?? "sin destinatario"}</span>
+            {d.tags.length > 0 && (
+              <span className="mt-1 flex flex-wrap gap-1">{d.tags.map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}</span>
+            )}
           </span>
         </label>
         <div className="flex flex-wrap gap-2">
