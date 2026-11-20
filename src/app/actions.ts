@@ -17,7 +17,7 @@ import { syncReplies } from "@/lib/gmail/sync";
 import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
 import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
-import { startSearchJob, cancelJob as cancelJobImpl } from "@/lib/search/engine";
+import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string> } | null;
 
@@ -269,13 +269,27 @@ export async function startSearch(_: FormState, fd: FormData): Promise<FormState
   const segmentId = Number(fd.get("segmentId"));
   const cuantos = Math.max(1, Math.min(25, Number(fd.get("cuantos") ?? 10)));
   const presupuesto = Math.max(0.2, Math.min(50, Number(fd.get("presupuesto") ?? readSettings().presupuestoBusquedaUsd)));
+  const c = String(fd.get("canal") ?? "correo");
+  const canal: CanalBusqueda = c === "whatsapp" || c === "cualquiera" ? c : "correo";
   try {
-    await startSearchJob(segmentId, cuantos, presupuesto);
+    await startSearchJob(segmentId, cuantos, presupuesto, canal);
   } catch (e) {
     return { error: (e as Error).message };
   }
   refresh();
   return { ok: true, message: "Búsqueda en curso. Puedes cerrar esta página; se reanuda sola." };
+}
+
+/** Vuelve a lanzar una búsqueda terminada con los mismos parámetros, sin repetir prospectos. */
+export async function repeatSearch(jobId: number): Promise<FormState> {
+  requireProfile();
+  try {
+    await repeatSearchJob(jobId);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  refresh();
+  return { ok: true, message: "Búsqueda nueva en curso." };
 }
 
 export async function cancelJob(jobId: number) {

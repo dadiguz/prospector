@@ -2,6 +2,7 @@ import { io } from "next/cache";
 import { all, get, json } from "./db";
 import { currentWeights } from "./project-md";
 import { syncRunTags, tagFilterSql } from "./tags";
+import { backfillChannels } from "./channels";
 import type { ScoreLine } from "./scoring";
 import type { Issue } from "./validator";
 
@@ -70,26 +71,41 @@ export type ProspectRow = {
   no_contactar_antes_de: string | null; correo: string | null; whatsapp: string | null; tiene_borrador: number; etiqueta: string | null;
 };
 
-export async function listProspects(projectId: number, lista: string, soloPendientes: boolean, tag: number | null = null) {
+export type Canal = "correo" | "whatsapp";
+const HAS_CORREO = "EXISTS (SELECT 1 FROM contacts c WHERE c.organization_id = p.organization_id AND c.canal = 'correo' AND c.estado = 'valido')";
+const HAS_WA = "EXISTS (SELECT 1 FROM contacts c WHERE c.organization_id = p.organization_id AND c.canal = 'whatsapp')";
+const canalSql = (canal: Canal | null) => (canal === "correo" ? `AND ${HAS_CORREO}` : canal === "whatsapp" ? `AND ${HAS_WA}` : "");
+
+export async function listProspects(projectId: number, lista: string, soloPendientes: boolean, tag: number | null = null, canal: Canal | null = null) {
   await io();
-  const rows = all<ProspectRow>(
+  backfillChannels(projectId);
+  const pend = soloPendientes ? "AND p.estado IN ('investigado','en_espera','borrador')" : "";
+  const rows = all<ProspectRow & { instagram: string | null }>(
     `SELECT p.id, o.nombre, o.ciudad, o.estado AS estado_mx, p.lista, p.estado, p.score, p.score_detalle_json, p.ficha_json,
        p.motivo_descarte, p.no_contactar_antes_de,
        (SELECT valor FROM contacts c WHERE c.organization_id = o.id AND c.canal = 'correo' AND c.estado = 'valido' ORDER BY c.id LIMIT 1) correo,
        (SELECT valor FROM contacts c WHERE c.organization_id = o.id AND c.canal = 'whatsapp' ORDER BY c.id LIMIT 1) whatsapp,
+       (SELECT valor FROM contacts c WHERE c.organization_id = o.id AND c.canal = 'instagram' ORDER BY c.id LIMIT 1) instagram,
        (SELECT COUNT(*) FROM messages m WHERE m.prospect_id = p.id AND m.estado IN ('borrador','aprobado')) tiene_borrador,
        r.etiqueta
      FROM prospects p JOIN organizations o ON o.id = p.organization_id LEFT JOIN search_runs r ON r.id = p.search_run_id
-     WHERE p.project_id = ? AND p.lista = ? AND ${tagFilterSql("p.id")} ${soloPendientes ? "AND p.estado IN ('investigado','en_espera','borrador')" : ""}
+     WHERE p.project_id = ? AND p.lista = ? AND ${tagFilterSql("p.id")} ${pend} ${canalSql(canal)}
      ORDER BY CASE p.estado WHEN 'investigado' THEN 0 WHEN 'borrador' THEN 1 WHEN 'en_espera' THEN 2 ELSE 3 END, p.score DESC, p.id DESC
      LIMIT 300`,
     projectId, lista, tag, tag,
   );
   const counts = all<{ lista: string; total: number; pendientes: number }>(
-    `SELECT lista, COUNT(*) total, SUM(estado IN ('investigado','en_espera','borrador')) pendientes FROM prospects p WHERE project_id = ? AND ${tagFilterSql("p.id")} GROUP BY lista`,
+    `SELECT lista, COUNT(*) total, SUM(estado IN ('investigado','en_espera','borrador')) pendientes FROM prospects p
+     WHERE project_id = ? AND ${tagFilterSql("p.id")} ${canalSql(canal)} GROUP BY lista`,
     projectId, tag, tag,
   );
-  return { rows, counts };
+  // Cuántos de la lista actual se pueden contactar por cada canal (para los botones de filtro).
+  const canales = all<{ correo: number; whatsapp: number }>(
+    `SELECT SUM(${HAS_CORREO}) correo, SUM(${HAS_WA}) whatsapp FROM prospects p
+     WHERE p.project_id = ? AND p.lista = ? AND ${tagFilterSql("p.id")} ${pend}`,
+    projectId, lista, tag, tag,
+  )[0];
+  return { rows, counts, canales: { correo: canales?.correo ?? 0, whatsapp: canales?.whatsapp ?? 0 } };
 }
 
 export async function prospectEvidence(prospectId: number) {

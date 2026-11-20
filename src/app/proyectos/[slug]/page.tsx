@@ -7,7 +7,7 @@ import { hookFigure, mxn } from "@/lib/hook-formula";
 import { readSettings } from "@/lib/profile";
 import { PageTitle, Section, Fold, Badge, TagChip } from "@/components/ui";
 import { AutoRefresh, ActionButton } from "@/components/client";
-import { cancelJob } from "@/app/actions";
+import { cancelJob, repeatSearch } from "@/app/actions";
 import { SearchForm } from "./search-form";
 
 const JOB_LABEL: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neutral" | "accent" }> = {
@@ -76,6 +76,16 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
                   {["pendiente", "en_curso", "en_pausa"].includes(j.estado) && (
                     <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
                       Cancelar
+                    </ActionButton>
+                  )}
+                  {["hecho", "fallo", "cancelado"].includes(j.estado) && (
+                    <ActionButton
+                      action={repeatSearch.bind(null, j.id)}
+                      className="btn"
+                      pendingLabel="Iniciando…"
+                      confirm={activeJob ? undefined : "¿Buscar de nuevo con los mismos parámetros? Los prospectos que ya tienes no se repiten."}
+                    >
+                      Buscar de nuevo
                     </ActionButton>
                   )}
                 </li>

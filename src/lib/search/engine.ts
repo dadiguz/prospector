@@ -114,7 +114,25 @@ Reglas:
 - Calidad sobre cantidad: si no hay buenos, dilo.
 Cómo leer páginas (importante): la herramienta de lectura solo abre direcciones que aparecieron en resultados de búsqueda o como enlaces dentro de una página que ya abriste. No escribas rutas a mano (como /contacto o /eventos): fallan. Abre primero la página que salió en la búsqueda, y de ahí sigue los enlaces que veas (contacto, aviso de privacidad, inscripciones, precios). Si no encuentras la página que necesitas, haz una búsqueda más específica (por ejemplo: nombre del sitio + "contacto" o + "aviso de privacidad").`;
 
-export async function startSearchJob(segmentId: number, cuantos: number, presupuestoUsd: number) {
+export type CanalBusqueda = "correo" | "whatsapp" | "cualquiera";
+const CANAL_ETIQUETA: Record<CanalBusqueda, string> = { correo: "", whatsapp: " · WhatsApp", cualquiera: " · cualquier contacto" };
+const CANAL_PROMPT: Record<CanalBusqueda, { descubrir: string; investigar: string }> = {
+  correo: {
+    descubrir: "Canal: correo. Prioriza organizaciones que publiquen un correo de contacto del negocio.",
+    investigar: "El canal será correo: lo más importante es un correo público del negocio con la URL donde aparece.",
+  },
+  whatsapp: {
+    descubrir: "Canal: WhatsApp. Prioriza organizaciones que atienden o venden por WhatsApp y publican su número.",
+    investigar:
+      "El canal será WhatsApp: lo más importante es el número de WhatsApp o celular que el negocio publica (botón o enlace wa.me en su sitio, pie de página, contacto, o el perfil público de Instagram o Facebook que salga en los resultados, sin iniciar sesión). Anota la URL donde lo viste. El correo es secundario.",
+  },
+  cualquiera: {
+    descubrir: "Canal: cualquiera. Sirven correo o WhatsApp públicos del negocio.",
+    investigar: "Sirve correo o WhatsApp: registra todos los canales públicos del negocio, cada uno con la URL donde aparece.",
+  },
+};
+
+export async function startSearchJob(segmentId: number, cuantos: number, presupuestoUsd: number, canal: CanalBusqueda = "correo") {
   if (!(await getSecret("anthropic_api_key"))) throw new NoApiKeyError();
   const seg = get<{ project_id: number; nombre: string }>("SELECT project_id, nombre FROM segments WHERE id = ?", segmentId);
   if (!seg) throw new Error("Segmento no encontrado");
@@ -125,20 +143,28 @@ export async function startSearchJob(segmentId: number, cuantos: number, presupu
     const runId = Number(
       run(
         "INSERT INTO search_runs (project_id, segment_id, etiqueta, algorithm_version_id, enfoque, pedidos, origen) VALUES (?, ?, ?, ?, ?, ?, 'busqueda')",
-        seg.project_id, segmentId, `Búsqueda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })} · ${seg.nombre}`, algo?.id ?? null, seg.nombre, cuantos,
+        seg.project_id, segmentId, `Búsqueda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })} · ${seg.nombre}${CANAL_ETIQUETA[canal]}`, algo?.id ?? null, `${seg.nombre}${CANAL_ETIQUETA[canal]}`, cuantos,
       ).lastInsertRowid,
     );
     const id = Number(
       run("INSERT INTO jobs (project_id, tipo, search_run_id, presupuesto_json) VALUES (?, 'busqueda', ?, ?)",
-        seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
+        seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, canal, maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
     );
     run("INSERT INTO job_steps (job_id, orden, tipo, clave) VALUES (?, 0, 'descubrir', 'descubrir')", id);
     ensureRunTag(runId);
     return id;
   });
-  audit("owner", "busqueda_iniciada", `job ${jobId}, segmento ${segmentId}, ${cuantos} sólidos, US$${presupuestoUsd}`);
+  audit("owner", "busqueda_iniciada", `job ${jobId}, segmento ${segmentId}, ${cuantos} sólidos, canal ${canal}, US$${presupuestoUsd}`);
   void runJob(jobId);
   return jobId;
+}
+
+/** Repite una búsqueda con los mismos parámetros; lo ya encontrado se excluye. */
+export async function repeatSearchJob(jobId: number) {
+  const j = get<{ presupuesto_json: string }>("SELECT presupuesto_json FROM jobs WHERE id = ?", jobId);
+  if (!j) throw new Error("Búsqueda no encontrada");
+  const b = json<{ usd: number; cuantos: number; segmentId: number; canal?: CanalBusqueda }>(j.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0 });
+  return startSearchJob(b.segmentId, b.cuantos, b.usd, b.canal ?? "correo");
 }
 
 export function cancelJob(jobId: number) {
@@ -187,11 +213,17 @@ async function runJob(jobId: number) {
     for (;;) {
       const job = get<{ estado: string; project_id: number; search_run_id: number; presupuesto_json: string }>("SELECT * FROM jobs WHERE id = ?", jobId);
       if (!job || job.estado !== "en_curso") return;
-      const budget = json<{ usd: number; cuantos: number; segmentId: number; maxCandidatos: number }>(job.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0, maxCandidatos: 20 });
+      const budget = json<{ usd: number; cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda }>(job.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0, maxCandidatos: 20 });
+      const canal = budget.canal ?? "correo";
       const gastado = get<{ s: number }>("SELECT COALESCE(SUM(costo_usd),0) s FROM usage_log WHERE job_id = ?", jobId)!.s;
-      const listos = get<{ c: number }>("SELECT COUNT(*) c FROM prospects WHERE search_run_id = ? AND lista = 'A'", job.search_run_id)!.c;
+      // "Listo" depende del canal pedido: correo verificado (lista A), WhatsApp, o cualquiera de los dos.
+      const conWa = "EXISTS (SELECT 1 FROM contacts c WHERE c.organization_id = p.organization_id AND c.canal = 'whatsapp')";
+      const condListo =
+        canal === "whatsapp" ? `p.lista <> 'descartado' AND ${conWa}` : canal === "cualquiera" ? `(p.lista = 'A' OR (p.lista <> 'descartado' AND ${conWa}))` : "p.lista = 'A'";
+      const listos = get<{ c: number }>(`SELECT COUNT(*) c FROM prospects p WHERE p.search_run_id = ? AND ${condListo}`, job.search_run_id)!.c;
+      const listosTxt = canal === "whatsapp" ? "con WhatsApp" : canal === "cualquiera" ? "con correo o WhatsApp" : "en la lista A";
 
-      if (listos >= budget.cuantos) return finish(jobId, "hecho", `Listo: ${listos} sólidos en la lista A. Gasto estimado US$${gastado.toFixed(2)}.`);
+      if (listos >= budget.cuantos) return finish(jobId, "hecho", `Listo: ${listos} sólidos ${listosTxt}. Gasto estimado US$${gastado.toFixed(2)}.`);
       // Tope de gasto: no empieza un paso si, con lo que cuesta en promedio un paso, se pasaría.
       const hechos = get<{ c: number }>("SELECT COUNT(*) c FROM job_steps WHERE job_id = ? AND estado = 'hecho'", jobId)!.c;
       const promedio = hechos ? gastado / hechos : 0;
@@ -204,7 +236,7 @@ async function runJob(jobId: number) {
         const total = get<{ a: number; b: number; wa: number; d: number }>(
           `SELECT SUM(lista='A') a, SUM(lista='B') b, SUM(lista='solo_wa_ig') wa, SUM(lista='descartado') d FROM prospects WHERE search_run_id = ?`, job.search_run_id)!;
         return finish(jobId, "hecho",
-          `Terminó: ${total.a ?? 0} en A, ${total.b ?? 0} en B, ${total.wa ?? 0} solo WhatsApp/IG, ${total.d ?? 0} descartados. ${(total.a ?? 0) < budget.cuantos ? "No hubo más sólidos sin relleno." : ""} Gasto US$${gastado.toFixed(2)}.`);
+          `Terminó: ${total.a ?? 0} en A, ${total.b ?? 0} en B, ${total.wa ?? 0} solo WhatsApp/IG, ${total.d ?? 0} descartados. ${listos < budget.cuantos ? `Quedaron ${listos} ${listosTxt}; no hubo más sólidos sin relleno.` : ""} Gasto US$${gastado.toFixed(2)}.`);
       }
 
       run("UPDATE job_steps SET estado = 'en_curso', intentos = intentos + 1, actualizado_en = datetime('now') WHERE id = ?", step.id);
@@ -214,7 +246,7 @@ async function runJob(jobId: number) {
         const out =
           step.tipo === "descubrir"
             ? await stepDiscover(jobId, job.project_id, job.search_run_id, budget)
-            : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }));
+            : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }), canal);
         run("UPDATE job_steps SET estado = 'hecho', salida_json = ?, error = NULL, actualizado_en = datetime('now') WHERE id = ?", JSON.stringify(out), step.id);
       } catch (e) {
         if (e instanceof PausedError) {
@@ -238,10 +270,15 @@ async function runJob(jobId: number) {
   }
 }
 
-async function stepDiscover(jobId: number, projectId: number, runId: number, budget: { cuantos: number; segmentId: number; maxCandidatos: number }) {
+async function stepDiscover(jobId: number, projectId: number, runId: number, budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda }) {
   const ctx = projectContext(projectId, budget.segmentId);
   const settings = readSettings();
   const pedidos = budget.cuantos * 3;
+  // Lo ya encontrado en el proyecto (lo más reciente primero), para que proponga organizaciones nuevas.
+  const conocidos = all<{ nombre: string }>(
+    "SELECT o.nombre FROM prospects p JOIN organizations o ON o.id = p.organization_id WHERE p.project_id = ? ORDER BY p.id DESC LIMIT 150",
+    projectId,
+  ).map((r) => r.nombre.slice(0, 60));
   const res = await research({
     tier: "medio",
     jobId,
@@ -253,6 +290,8 @@ async function stepDiscover(jobId: number, projectId: number, runId: number, bud
     prompt: `${ctx.text}
 
 Encuentra hasta ${pedidos} organizaciones candidatas para este segmento, en México, fuera de los estados excluidos.
+${CANAL_PROMPT[budget.canal ?? "correo"].descubrir}
+${conocidos.length ? `Estas ya las tenemos; NO las propongas otra vez: ${conocidos.join("; ")}.` : ""}
 Prioriza las que cumplan los atributos de mayor peso del perfil y muestren el dolor que resolvemos.${ctx.investigacion ? `\nContexto del proyecto: ${ctx.investigacion}` : ""}
 Para cada una da: nombre, sitio web oficial, ciudad, estado y por qué encaja (una línea). No investigues a fondo todavía.`,
   });
@@ -305,7 +344,14 @@ async function mxOk(domain: string): Promise<boolean> {
   }
 }
 
-async function stepInvestigate(jobId: number, projectId: number, runId: number, segmentId: number, cand: { nombre: string; sitio_web: string | null; ciudad: string | null; estado: string | null; por_que: string }) {
+async function stepInvestigate(
+  jobId: number,
+  projectId: number,
+  runId: number,
+  segmentId: number,
+  cand: { nombre: string; sitio_web: string | null; ciudad: string | null; estado: string | null; por_que: string },
+  canal: CanalBusqueda = "correo",
+) {
   const ctx = projectContext(projectId, segmentId);
   const settings = readSettings();
   const res = await research({
@@ -322,6 +368,7 @@ Investiga a este candidato y arma su ficha con evidencia:
 ${cand.nombre} — ${cand.sitio_web ?? "sitio desconocido"} — ${cand.ciudad ?? ""} ${cand.estado ?? ""}
 Por qué podría encajar: ${cand.por_que}
 
+${CANAL_PROMPT[canal].investigar}
 Necesito: qué es y su tamaño (verificado vs SUPOSICIÓN), cómo resuelve hoy lo que nuestro producto resuelve (cita textual del dolor si existe), correo público del negocio con la URL exacta donde aparece (busca en contacto, pie de página, aviso de privacidad y términos), WhatsApp o Instagram públicos, nombre de quién decide solo si está publicado, cuáles atributos del perfil cumple, qué descalificadores aplican y qué no se le debe prometer.
 ${ctx.investigacion ? `Además, para este proyecto: ${ctx.investigacion}` : ""}
 Propón una observación "Vimos que…" sobre algo específico y verificado, el asunto y la siguiente oportunidad concreta para proponerles (no algo que ya tengan resuelto).`,
@@ -336,13 +383,22 @@ Propón una observación "Vimos que…" sobre algo específico y verificado, el 
     prompt: `Investigación de ${cand.nombre}:\n\n${res.text}\n\nURLs consultadas:\n${res.urls.join("\n")}`,
   });
   const r = await savePropsect(projectId, runId, segmentId, data as FichaT, ctx.weights, ctx.excluidos);
-  const LISTA: Record<string, string> = { A: "lista A", B: "lista B", solo_wa_ig: "solo WhatsApp o Instagram", descartado: "descartado" };
+  const LISTA: Record<string, string> = { A: "lista A", B: "lista B", solo_wa_ig: "solo WhatsApp o Instagram", descartado: "descartado", repetido: "repetido" };
   logActivity(jobId, `${cand.nombre}: ${LISTA[r.lista]}${r.motivo ? ` (${r.motivo})` : ` · ${r.score} puntos`}`);
   return r;
 }
 
 async function savePropsect(projectId: number, runId: number, segmentId: number, f: FichaT, weights: Weight[], excluidos: string[]) {
   const correo = f.correo?.trim().toLowerCase() || null;
+  // Repetidos: misma organización por nombre o por dominio (sitio o correo) ya en este proyecto.
+  const dominios = [f.sitio_web ? safeHost(f.sitio_web) : null, correo && !isFreeMail(domainOf(correo)) ? domainOf(correo) : null].filter(Boolean) as string[];
+  const previo = get<{ id: number }>(
+    `SELECT p.id FROM prospects p JOIN organizations o ON o.id = p.organization_id
+     WHERE p.project_id = ? AND (o.nombre_norm = ? ${dominios.length ? `OR EXISTS (SELECT 1 FROM json_each(o.dominios_json) j WHERE j.value IN (${dominios.map(() => "?").join(",")}))` : ""})
+     LIMIT 1`,
+    projectId, norm(f.nombre), ...dominios,
+  );
+  if (previo) return { prospecto: previo.id, lista: "repetido" as const, score: 0, motivo: "ya estaba en la base; no se duplica" };
   const estado = detectEstado(f.estado ?? f.ciudad ?? "") ?? f.estado;
   let motivo: string | null = null;
   let correoOk = false;

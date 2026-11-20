@@ -7,6 +7,7 @@ import { inferAttributes, score, type Weight, type LooseFicha } from "./scoring"
 import { hookFigure } from "./hook-formula";
 import { firstPrice } from "./scoring";
 import { currentWeights } from "./project-md";
+import { addChannels } from "./channels";
 
 /**
  * Importador de historial (MVP, sección 10).
@@ -163,9 +164,7 @@ export function importHistory(projectId: number, dir: string, opts: { reset?: bo
             orgId, e, mailboxType(e), Array.isArray(rec.ficha.fuente) ? String(rec.ficha.fuente[0]) : ((rec.ficha.fuente as string) ?? null), null,
           );
       }
-      const wa = (rec.ficha.wa ?? rec.ficha.tel) as string | undefined;
-      if (wa && !get("SELECT 1 FROM contacts WHERE organization_id = ? AND valor = ?", orgId, String(wa)))
-        run("INSERT INTO contacts (organization_id, canal, valor) VALUES (?, 'whatsapp', ?)", orgId, String(wa));
+      addChannels(orgId, rec.ficha);
       for (const raw of [rec.ficha.fuente, rec.ficha.evidencia].flat().filter((u): u is string => typeof u === "string" && u.startsWith("http"))) {
         // "https://sitio/ (mailto y sección de precios; leído el 17-nov)" → URL + nota
         const [url, ...nota] = raw.trim().split(/\s+/);

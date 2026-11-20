@@ -7,7 +7,8 @@ import { readProfile } from "@/lib/profile";
 import { mxn } from "@/lib/hook-formula";
 import { firstPhone, waLink } from "@/lib/whatsapp";
 import { render } from "@/lib/drafts";
-import { PageTitle, Badge, Assumable, Empty, ESTADO_LABEL, TagChip, TagFilter } from "@/components/ui";
+import { PageTitle, Badge, Assumable, Empty, ESTADO_LABEL, TagChip, TagFilter, MailIcon, WhatsAppIcon, InstagramIcon } from "@/components/ui";
+import type { Canal } from "@/lib/queries";
 import { ProspectActions } from "./actions-client";
 import { BulkBar, RowCheckbox } from "./bulk";
 import { projectTags, tagsByProspect } from "@/lib/tags";
@@ -47,20 +48,23 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   const tags = projectTags(project.id);
   const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
   const todos = sp.todos === "1";
+  const canal: Canal | null = sp.canal === "correo" || sp.canal === "whatsapp" ? sp.canal : null;
   let lista = LISTAS.some((l) => l.key === sp.lista) ? (sp.lista as string) : "A";
   if (!sp.lista && tagId) {
     // Desde "Ver resultados": abrir la primera lista con prospectos de esa búsqueda.
-    const { counts: c0 } = await listProspects(project.id, "A", false, tagId);
+    const { counts: c0 } = await listProspects(project.id, "A", false, tagId, canal);
     lista = LISTAS.find((l) => (c0.find((x) => x.lista === l.key)?.total ?? 0) > 0)?.key ?? "A";
   }
-  const { rows, counts } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId);
+  const { rows, counts, canales } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId, canal);
   const tagMap = tagsByProspect(rows.map((r) => r.id));
-  const qs = (o: { lista?: string; todos?: boolean; tag?: number | null }) => {
+  const qs = (o: { lista?: string; todos?: boolean; tag?: number | null; canal?: Canal | null }) => {
     const p = new URLSearchParams();
     p.set("lista", o.lista ?? lista);
     if (o.todos ?? todos) p.set("todos", "1");
     const t = o.tag === undefined ? tagId : o.tag;
     if (t) p.set("tag", String(t));
+    const c = o.canal === undefined ? canal : o.canal;
+    if (c) p.set("canal", c);
     return `?${p}`;
   };
   const profile = readProfile();
@@ -74,7 +78,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <PageTitle sub="Ordenados por probabilidad de respuesta. Abre una fila para ver la evidencia.">Prospectos</PageTitle>
-      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}&todos=1` : qs({ tag: null }))} />
+      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}&todos=1${canal ? `&canal=${canal}` : ""}` : qs({ tag: null }))} />
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {LISTAS.map((l) => {
           const c = counts.find((x) => x.lista === l.key);
@@ -94,6 +98,23 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
             {todos ? "Solo por revisar" : "Ver también contactados"}
           </Link>
         )}
+      </div>
+
+      <div className="-mt-3 mb-6 flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-xs text-ink-3">Canal</span>
+        {([
+          ["correo", "Correo", <MailIcon key="m" size={14} />, canales.correo],
+          ["whatsapp", "WhatsApp", <WhatsAppIcon key="w" size={14} />, canales.whatsapp],
+        ] as const).map(([k, label, icon, n]) => (
+          <Link
+            key={k}
+            href={qs({ canal: canal === k ? null : k })}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${canal === k ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`}
+            title={canal === k ? "Quitar filtro de canal" : `Solo los que tienen ${label.toLowerCase()}`}
+          >
+            {icon} {label} <span className="text-ink-3">{n}</span>
+          </Link>
+        ))}
       </div>
 
       {rows.length === 0 ? (
@@ -142,6 +163,11 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
                     </div>
                     <div className="hidden text-right text-sm sm:block">{cifra ? `unos ${mxn(cifra)}` : ""}</div>
                     <div className="flex items-center gap-2 justify-self-end">
+                      <span className="flex items-center gap-1 text-ink-2" aria-label="Canales">
+                        {r.correo && <span title={`Correo: ${r.correo}`}><MailIcon /></span>}
+                        {r.whatsapp && <span title={`WhatsApp: ${r.whatsapp}`}><WhatsAppIcon /></span>}
+                        {r.instagram && <span title={`Instagram: ${r.instagram}`}><InstagramIcon /></span>}
+                      </span>
                       {r.score != null && lista !== "descartado" && <span className="font-mono text-xs text-ink-3">{r.score}</span>}
                       <Badge tone={est.tone}>{est.label}</Badge>
                     </div>

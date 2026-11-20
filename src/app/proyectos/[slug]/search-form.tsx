@@ -9,7 +9,15 @@ export function SearchForm({ segmentId, defaultBudget, disabled }: { segmentId: 
       {(state, pending) => (
         <>
           <input type="hidden" name="segmentId" value={segmentId} />
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end justify-end gap-2">
+            <label className="text-xs text-ink-2">
+              Contacto
+              <select name="canal" defaultValue="correo" className="select mt-1 w-36">
+                <option value="correo">Correo</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="cualquiera">Cualquiera</option>
+              </select>
+            </label>
             <label className="text-xs text-ink-2">
               Sólidos
               <input name="cuantos" type="number" min={1} max={25} defaultValue={10} className="input mt-1 w-20" />

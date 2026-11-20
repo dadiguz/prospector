@@ -1,3 +1,4 @@
+import { TagBar } from "./tag-bar";
 import type { ReactNode } from "react";
 
 export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
@@ -120,20 +121,37 @@ export function TagChip({ nombre, color, active, count }: { nombre: string; colo
   );
 }
 
-/** Barra de filtro por etiqueta: enlaces que conservan los demás parámetros. */
-export function TagFilter({ tags, active, hrefFor }: { tags: { id: number; nombre: string; color: string; total?: number }[]; active: number | null; hrefFor: (id: number | null) => string }) {
-  if (!tags.length) return null;
+/** Barra de filtro por etiqueta (recientes a la vista, el resto en una ventana). */
+export function TagFilter({ tags, active, hrefFor }: { tags: { id: number; nombre: string; color: string; total?: number; tipo?: string }[]; active: number | null; hrefFor: (id: number | null) => string }) {
+  return <TagBar tags={tags.map((t) => ({ ...t, href: hrefFor(t.id) }))} active={active} clearHref={hrefFor(null)} />;
+}
+
+/* Iconos de canal */
+export function MailIcon({ size = 16 }: { size?: number }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-xs text-ink-3">Etiquetas</span>
-      {tags.map((t) => (
-        <a key={t.id} href={hrefFor(active === t.id ? null : t.id)} className={active && active !== t.id ? "opacity-50 hover:opacity-100" : ""}>
-          <TagChip nombre={t.nombre} color={t.color} active={active === t.id} count={t.total} />
-        </a>
-      ))}
-      {active && (
-        <a href={hrefFor(null)} className="ml-1 text-xs text-ink-2 underline underline-offset-4">Quitar filtro</a>
-      )}
-    </div>
+    <svg viewBox="0 0 20 20" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <rect x="2.5" y="4.5" width="15" height="11" rx="2" />
+      <path d="M3 5.5l7 5 7-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+export function WhatsAppIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 20 20" width={size} height={size} aria-hidden="true">
+      <path d="M10 2.2a7.8 7.8 0 0 0-6.7 11.8L2.3 17.7l3.8-1A7.8 7.8 0 1 0 10 2.2z" fill="#25D366" />
+      <path
+        d="M7.4 6.3c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2.1.4 0 .5l-.4.6c-.1.2-.1.3 0 .5.5.8 1.2 1.5 2.1 2 .2.1.3.1.5 0l.6-.7c.1-.2.3-.2.5-.1l1.5.7c.2.1.3.2.3.4 0 .5-.2 1.1-.6 1.4-.5.4-1.2.6-2.3.2-1.6-.6-3-1.8-3.9-3.3-.6-1-.8-1.9-.6-2.6.1-.4.3-.8.6-1.2z"
+        fill="#fff"
+      />
+    </svg>
+  );
+}
+export function InstagramIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 20 20" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <rect x="3" y="3" width="14" height="14" rx="4" />
+      <circle cx="10" cy="10" r="3.2" />
+      <circle cx="14.2" cy="5.8" r="0.6" fill="currentColor" />
+    </svg>
   );
 }
