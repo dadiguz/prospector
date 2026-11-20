@@ -31,6 +31,16 @@ Open http://127.0.0.1:4321 and:
 
 Each person uses their own API key and their own Gmail.
 
+## Keep it running (Mac)
+
+To run it in the background, start at login and restart if it crashes:
+
+```bash
+npm run servicio -- instalar
+```
+
+After `git pull`, run `npm run servicio -- actualizar`. Other commands: `estado`, `logs`, `reiniciar`, `desinstalar`. On Windows or Linux use `npm run build && npm start`.
+
 ## Projects
 
 The repo ships with no projects. A project is a Markdown file with what you sell, what you can and cannot claim, the scoring profile, segments and email templates.
