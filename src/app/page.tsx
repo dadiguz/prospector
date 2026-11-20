@@ -15,11 +15,18 @@ async function HomeContent() {
 
   return (
     <>
-      <PageTitle sub="Cada proyecto con lo que se ha contactado y quién respondió.">Hola, {profile.nombre.split(" ")[0]}</PageTitle>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageTitle sub="Cada proyecto con lo que se ha contactado y quién respondió.">Hola, {profile.nombre.split(" ")[0]}</PageTitle>
+        <Link href="/proyectos/nuevo" className="btn btn-primary">Nuevo proyecto</Link>
+      </div>
       {projects.length === 0 ? (
         <div className="space-y-4">
-          <Empty>Todavía no hay proyectos. Importa el .md que te compartieron, o descarga la plantilla, llénala e impórtala.</Empty>
-          <ImportProjectForm primary />
+          <Empty>
+            Todavía no hay proyectos.{" "}
+            <Link href="/proyectos/nuevo" className="text-accent underline underline-offset-4">Crea uno con el formulario</Link>
+            {" "}o importa el .md que te compartieron.
+          </Empty>
+          <ImportProjectForm />
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getProject, projectDetail } from "@/lib/queries";
@@ -34,7 +35,10 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
       {activeJob && <AutoRefresh seconds={5} />}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <PageTitle sub={project.idea}>{project.nombre}</PageTitle>
-        <a href={`/api/proyectos/${project.slug}/exportar`} className="btn" title="Configuración del proyecto, sin prospectos ni datos personales">Exportar .md</a>
+        <div className="flex gap-2">
+          <Link href={`/proyectos/${project.slug}/editar`} className="btn">Editar</Link>
+          <a href={`/api/proyectos/${project.slug}/exportar`} className="btn btn-quiet" title="Configuración del proyecto, sin prospectos ni datos personales">Exportar .md</a>
+        </div>
       </div>
 
       <Section title="Propuesta de valor">

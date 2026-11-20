@@ -14,7 +14,8 @@ import { domainOf } from "@/lib/text";
 import { saveClient as saveGmailClientImpl, disconnect as gmailDisconnect } from "@/lib/gmail/oauth";
 import * as gmailApi from "@/lib/gmail/api";
 import { syncReplies } from "@/lib/gmail/sync";
-import { importProject, parseMarkdown } from "@/lib/project-md";
+import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
+import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { startSearchJob, cancelJob as cancelJobImpl } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string> } | null;
@@ -452,5 +453,39 @@ export async function importProjectMd(_: FormState, fd: FormData): Promise<FormS
     return { ok: true, message: r.nuevo ? `Proyecto “${doc.nombre}” importado.` : `Proyecto “${doc.nombre}” actualizado; sus prospectos y mensajes se conservan.` };
   } catch (e) {
     return { error: (e as Error).message };
+  }
+}
+
+/* ---------- Editor de proyectos ---------- */
+
+export async function saveProject(doc: ProjectDoc, existingSlug: string | null): Promise<FormState & { slug?: string }> {
+  const clean = cleanDoc(doc);
+  if (existingSlug) clean.slug = existingSlug;
+  else {
+    let slug = slugify(clean.nombre);
+    for (let i = 2; get("SELECT 1 FROM projects WHERE slug = ?", slug); i++) slug = `${slugify(clean.nombre)}-${i}`;
+    clean.slug = slug;
+  }
+  if (!clean.gmailEtiqueta) clean.gmailEtiqueta = `Prospección/${clean.nombre}`;
+  const parsed = ProjectDocSchema.safeParse(clean);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const claves = parsed.data.pesos.map((p) => p.clave);
+  if (new Set(claves).size !== claves.length) return { error: "Hay dos atributos del perfil con la misma clave." };
+  try {
+    importProject(parsed.data as ProjectDoc);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  refresh();
+  return { ok: true, message: "Proyecto guardado.", slug: clean.slug };
+}
+
+export async function improveField(campo: string, etiqueta: string, valor: string, contexto: string): Promise<{ sugerencia?: string; motivo?: string; error?: string }> {
+  if (!(campo in CAMPOS)) return { error: "Campo no reconocido." };
+  try {
+    return await improveText(campo as Campo, etiqueta.slice(0, 120), valor, contexto);
+  } catch (e) {
+    if (e instanceof NoApiKeyError) return { error: "Agrega tu API key de Claude en Ajustes para usar la varita." };
+    return { error: `No se pudo mejorar: ${(e as Error).message}` };
   }
 }

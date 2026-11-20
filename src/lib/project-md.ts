@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { all, get, json, run, tx } from "./db";
 import { norm } from "./text";
 
@@ -245,6 +246,11 @@ export function parseMarkdown(md: string): ProjectDoc {
 /* ---------- Base de datos ---------- */
 
 export function readProject(projectId: number): ProjectDoc {
+  // Objetos planos: las filas de node:sqlite no tienen prototipo y no se pueden pasar a componentes de cliente.
+  return JSON.parse(JSON.stringify(readProjectRaw(projectId))) as ProjectDoc;
+}
+
+function readProjectRaw(projectId: number): ProjectDoc {
   const p = get<{ slug: string; nombre: string; idea: string; propuesta_valor: string; voz: string; metrica_principal: string; conversion: string; meta_actual: string; config_json: string }>(
     "SELECT * FROM projects WHERE id = ?", projectId)!;
   const cfg = json<{ empresa?: string; investigacion?: string; noInsistir?: string[]; gmail?: { etiqueta?: string } }>(p.config_json, {});
@@ -402,4 +408,61 @@ export function currentWeights(projectId: number) {
     "SELECT clave, descripcion, peso FROM icp_attributes WHERE project_id = ? AND version = (SELECT MAX(version) FROM icp_attributes WHERE project_id = ?) ORDER BY peso DESC, id",
     projectId, projectId,
   );
+}
+
+/* ---------- Validación (editor) ---------- */
+
+const str = z.string().trim();
+export const ProjectDocSchema = z.object({
+  nombre: str.min(2, "El proyecto necesita un nombre."),
+  slug: str,
+  idea: str,
+  propuesta_valor: str.min(10, "Escribe la propuesta de valor."),
+  empresa: str,
+  voz: str,
+  metrica_principal: str,
+  conversion: str,
+  meta_actual: str,
+  investigacion: str,
+  gmailEtiqueta: str,
+  noInsistir: z.array(str),
+  facts: z.array(z.object({ afirmacion: str, tipo: z.enum(["si_afirmar", "no_afirmar", "no_mencionar", "pendiente"]), evidencia: str, terminos: z.array(str) })),
+  hook: z
+    .object({ clave: str, nombre: str, formula: str, multiplicador: z.number(), redondeo: z.number(), frase: str, condicion: str, supuestos: z.array(str) })
+    .nullable(),
+  pesos: z.array(z.object({ clave: str.regex(/^[a-z0-9_]+$/, "Clave de atributo inválida."), descripcion: str.min(3), peso: z.number().int().min(-100).max(100) })).min(1, "Agrega al menos un atributo al perfil."),
+  descalificadores: z.array(z.object({ regla: str, tipo: z.enum(["duro", "blando"]), origen: str })),
+  segmentos: z.array(z.object({ nombre: str.min(2), definicion: str, consultas: z.array(str) })).min(1, "Agrega al menos un segmento."),
+  territorio: z.object({ excluidos: z.array(str), excepciones: z.array(str), nota: str }),
+  plantillaCorreo: z.object({ asunto: str, cuerpo: str }).nullable(),
+  plantillaWhatsapp: z.string().nullable(),
+});
+
+/** Quita filas vacías que deja el editor. */
+export function cleanDoc(d: ProjectDoc): ProjectDoc {
+  const ne = (s: string) => s.trim().length > 0;
+  return {
+    ...d,
+    noInsistir: d.noInsistir.filter(ne),
+    facts: d.facts.filter((f) => ne(f.afirmacion)).map((f) => ({ ...f, terminos: f.terminos.filter(ne) })),
+    hook: d.hook && ne(d.hook.formula) ? { ...d.hook, supuestos: d.hook.supuestos.filter(ne), clave: d.hook.clave || slugify(d.hook.nombre || "gancho").replace(/-/g, "_") } : null,
+    pesos: d.pesos.filter((p) => ne(p.descripcion)).map((p) => ({ ...p, clave: p.clave || attrKey(p.descripcion) })),
+    descalificadores: d.descalificadores.filter((q) => ne(q.regla)),
+    segmentos: d.segmentos.filter((s) => ne(s.nombre)).map((s) => ({ ...s, consultas: s.consultas.filter(ne) })),
+    territorio: { ...d.territorio, excluidos: d.territorio.excluidos.filter(ne), excepciones: d.territorio.excepciones.filter(ne) },
+    plantillaCorreo: d.plantillaCorreo && ne(d.plantillaCorreo.cuerpo) ? d.plantillaCorreo : null,
+    plantillaWhatsapp: d.plantillaWhatsapp && ne(d.plantillaWhatsapp) ? d.plantillaWhatsapp : null,
+  };
+}
+export const attrKey = (s: string) => slugify(s).replace(/-/g, "_").split("_").slice(0, 5).join("_");
+
+export function emptyDoc(): ProjectDoc {
+  return {
+    nombre: "", slug: "", idea: "", propuesta_valor: "", empresa: "", voz: "Directa y concreta", metrica_principal: "", conversion: "", meta_actual: "",
+    investigacion: "", gmailEtiqueta: "", noInsistir: [],
+    facts: [], hook: null, pesos: [], descalificadores: [], segmentos: [{ nombre: "", definicion: "", consultas: [""] }],
+    territorio: { excluidos: [], excepciones: [], nota: "" },
+    plantillaCorreo: { asunto: PLANTILLA_PROYECTO.plantillaCorreo!.asunto, cuerpo: PLANTILLA_PROYECTO.plantillaCorreo!.cuerpo },
+    plantillaWhatsapp: PLANTILLA_PROYECTO.plantillaWhatsapp,
+  };
 }
