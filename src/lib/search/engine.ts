@@ -154,6 +154,18 @@ export function resumeJobs() {
   }
 }
 
+/** Bitácora en vivo del job: las últimas líneas de lo que está haciendo (para la pantalla). */
+export function logActivity(jobId: number, texto: string) {
+  const prev = json<{ t: string; texto: string }[]>(get<{ a: string }>("SELECT actividad_json a FROM jobs WHERE id = ?", jobId)?.a, []);
+  const all = [...prev, { t: new Date().toISOString(), texto }];
+  // Se guardan las últimas 8 líneas, pero nunca se pierde la del paso actual.
+  const esPaso = (x: string) => /^(Investigando a|Buscando candidatos)/.test(x);
+  const paso = [...all].reverse().find((a) => esPaso(a.texto));
+  const resto = all.filter((a) => a !== paso).slice(-7);
+  const next = paso ? [...resto, paso].sort((x, y) => x.t.localeCompare(y.t)) : resto;
+  run("UPDATE jobs SET actividad_json = ?, actualizado_en = datetime('now') WHERE id = ?", JSON.stringify(next), jobId);
+}
+
 function schedule(jobId: number, ms: number) {
   clearTimeout(timers.get(jobId));
   timers.set(jobId, setTimeout(() => void runJob(jobId), ms));
@@ -190,6 +202,8 @@ async function runJob(jobId: number) {
       }
 
       run("UPDATE job_steps SET estado = 'en_curso', intentos = intentos + 1, actualizado_en = datetime('now') WHERE id = ?", step.id);
+      const nombre = json<{ nombre?: string }>(step.entrada_json, {}).nombre;
+      logActivity(jobId, step.tipo === "descubrir" ? "Buscando candidatos para el segmento" : `Investigando a ${nombre ?? "un candidato"}`);
       try {
         const out =
           step.tipo === "descubrir"
@@ -226,6 +240,7 @@ async function stepDiscover(jobId: number, projectId: number, runId: number, bud
     tier: "medio",
     jobId,
     paso: "descubrir",
+    onActivity: (t) => logActivity(jobId, t),
     maxSearches: settings.modoEconomico ? 4 : 8,
     blockedDomains: ctx.blocked,
     system: SYSTEM_RULES,
@@ -243,6 +258,7 @@ Para cada una da: nombre, sitio web oficial, ciudad, estado y por qué encaja (u
     system: "Convierte la lista de candidatos a JSON. No inventes candidatos ni datos que no estén en el texto.",
     prompt: res.text,
   });
+  logActivity(jobId, `${data.candidatos.length} candidatos encontrados; revisando duplicados y territorio`);
 
   const vistos = new Set<string>();
   const nuevos: typeof data.candidatos = [];
@@ -290,6 +306,7 @@ async function stepInvestigate(jobId: number, projectId: number, runId: number, 
     tier: "medio",
     jobId,
     paso: "investigar",
+    onActivity: (t) => logActivity(jobId, t),
     maxSearches: settings.busquedasWebPorCandidato,
     blockedDomains: ctx.blocked,
     system: SYSTEM_RULES,
@@ -312,7 +329,10 @@ Propón una observación "Vimos que…" sobre algo específico y verificado, el 
       "Convierte la investigación a la ficha JSON. No inventes nada: si un dato no está en el texto, usa null o false. Marca como 'suposicion' la evidencia que no esté respaldada por una URL. Los atributos son true solo si la investigación lo respalda.",
     prompt: `Investigación de ${cand.nombre}:\n\n${res.text}\n\nURLs consultadas:\n${res.urls.join("\n")}`,
   });
-  return savePropsect(projectId, runId, segmentId, data as FichaT, ctx.weights, ctx.excluidos);
+  const r = await savePropsect(projectId, runId, segmentId, data as FichaT, ctx.weights, ctx.excluidos);
+  const LISTA: Record<string, string> = { A: "lista A", B: "lista B", solo_wa_ig: "solo WhatsApp o Instagram", descartado: "descartado" };
+  logActivity(jobId, `${cand.nombre}: ${LISTA[r.lista]}${r.motivo ? ` (${r.motivo})` : ` · ${r.score} puntos`}`);
+  return r;
 }
 
 async function savePropsect(projectId: number, runId: number, segmentId: number, f: FichaT, weights: Weight[], excluidos: string[]) {

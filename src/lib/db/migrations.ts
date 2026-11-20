@@ -349,4 +349,11 @@ ALTER TABLE messages ADD COLUMN verificacion TEXT;
 CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, actualizado_en TEXT NOT NULL DEFAULT (datetime('now')));
 `,
   },
+  {
+    id: 4,
+    name: "actividad_jobs",
+    sql: /* sql */ `
+ALTER TABLE jobs ADD COLUMN actividad_json TEXT NOT NULL DEFAULT '[]';
+`,
+  },
 ];

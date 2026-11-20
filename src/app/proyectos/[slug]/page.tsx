@@ -66,6 +66,7 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
                       {j.estado === "en_pausa" && j.reanudar_despues ? ` Reanuda a las ${new Date(j.reanudar_despues).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}.` : ""}
                     </p>
                   </div>
+                  <Activity json={j.actividad_json} live={j.estado === "en_curso"} />
                   {["pendiente", "en_curso", "en_pausa"].includes(j.estado) && (
                     <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
                       Cancelar
@@ -197,5 +198,35 @@ export default function ProjectPage(props: PageProps<"/proyectos/[slug]">) {
     <Suspense fallback={<p className="text-sm text-ink-3">Cargando…</p>}>
       <ProjectPageContent {...props} />
     </Suspense>
+  );
+}
+
+/** Lo que la búsqueda está haciendo: la última acción destacada y las anteriores tenues. */
+function Activity({ json: raw, live }: { json: string; live: boolean }) {
+  const items = json<{ t: string; texto: string }[]>(raw, []);
+  if (!items.length) return null;
+  const hora = (t: string) => new Date(t).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const esPaso = (t: string) => /^(Investigando a|Buscando candidatos)/.test(t);
+  const paso = [...items].reverse().find((a) => esPaso(a.texto));
+  const feed = items.filter((a) => !esPaso(a.texto)).reverse().slice(0, live ? 5 : 1);
+  return (
+    <div className="order-last w-full border-t border-line pt-2 text-xs">
+      {paso && (
+        <p className="flex items-center gap-2 font-medium text-ink">
+          {live && <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" aria-hidden="true" />}
+          <span className="truncate">{live ? paso.texto : `Último paso: ${paso.texto}`}</span>
+        </p>
+      )}
+      {feed.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {feed.map((a, i) => (
+            <li key={i} className={`flex gap-2 ${i === 0 ? "text-ink-2" : "text-ink-3"}`}>
+              <span className="truncate">{a.texto}</span>
+              <span className="ml-auto shrink-0">{hora(a.t)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

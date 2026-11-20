@@ -118,6 +118,8 @@ export async function research(opts: {
   paso: string;
   jobId?: number;
   blockedDomains?: string[];
+  /** Avisos en vivo: qué busca o qué página lee. */
+  onActivity?: (texto: string) => void;
 }): Promise<{ text: string; urls: string[]; consumo: Consumo }> {
   const c = await client();
   const model = modelFor(opts.tier);
@@ -135,8 +137,7 @@ export async function research(opts: {
     const t0 = Date.now();
     let res: Anthropic.Beta.BetaMessage;
     try {
-      res = await c.beta.messages
-        .stream({
+      const stream = c.beta.messages.stream({
           model,
           max_tokens: 32000,
           system: opts.system,
@@ -144,8 +145,23 @@ export async function research(opts: {
           tools,
           messages,
           ...(supportsFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
-        })
-        .finalMessage();
+        });
+      if (opts.onActivity) {
+        const avisar = opts.onActivity;
+        stream.on("contentBlock", (b) => {
+          if (b.type === "server_tool_use") {
+            const input = (b.input ?? {}) as { query?: string; url?: string };
+            if (b.name === "web_search" && input.query) avisar(`Buscando “${input.query}”`);
+            else if (b.name === "web_fetch" && input.url) avisar(`Leyendo ${input.url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 80)}`);
+          } else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) {
+            avisar(`${b.content.length} resultados encontrados`);
+          } else if (b.type === "web_fetch_tool_result") {
+            const err = (b.content as { type?: string; error_code?: string })?.type?.includes("error");
+            if (err) avisar("La página no se pudo leer; sigue con otra fuente");
+          }
+        });
+      }
+      res = await stream.finalMessage();
     } catch (e) {
       toPaused(e);
     }

@@ -47,8 +47,8 @@ export async function projectDetail(projectId: number) {
     weights: currentWeights(projectId),
     territory: get<{ excluidos_json: string; excepciones_json: string; motivo: string; vigente_desde: string }>(
       "SELECT * FROM territories WHERE project_id = ? ORDER BY id DESC LIMIT 1", projectId),
-    jobs: all<{ id: number; estado: string; mensaje: string | null; creado_en: string; reanudar_despues: string | null; etiqueta: string; pasos: number; hechos: number; costo: number; a: number }>(`
-      SELECT j.id, j.estado, j.mensaje, j.creado_en, j.reanudar_despues, r.etiqueta,
+    jobs: all<{ id: number; estado: string; mensaje: string | null; creado_en: string; reanudar_despues: string | null; etiqueta: string; pasos: number; hechos: number; costo: number; a: number; actividad_json: string }>(`
+      SELECT j.id, j.estado, j.mensaje, j.creado_en, j.reanudar_despues, r.etiqueta, j.actividad_json,
         (SELECT COUNT(*) FROM job_steps s WHERE s.job_id = j.id AND s.estado <> 'omitido') pasos,
         (SELECT COUNT(*) FROM job_steps s WHERE s.job_id = j.id AND s.estado = 'hecho') hechos,
         COALESCE((SELECT SUM(costo_usd) FROM usage_log u WHERE u.job_id = j.id), 0) costo,

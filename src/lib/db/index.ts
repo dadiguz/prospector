@@ -3,7 +3,7 @@ import { dbPath } from "../paths";
 import { migrations } from "./migrations";
 
 type Db = DatabaseSync;
-const g = globalThis as unknown as { __prospectorDb?: Db };
+const g = globalThis as unknown as { __prospectorDb?: Db; __prospectorMigrated?: number };
 
 function migrate(db: Db) {
   db.exec(`CREATE TABLE IF NOT EXISTS _migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`);
@@ -29,8 +29,12 @@ export function db(): Db {
   if (!g.__prospectorDb) {
     const conn = new DatabaseSync(dbPath());
     conn.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-    migrate(conn);
     g.__prospectorDb = conn;
+  }
+  // También con la conexión ya abierta (recargas en desarrollo): aplica migraciones nuevas.
+  if (g.__prospectorMigrated !== migrations.length) {
+    migrate(g.__prospectorDb);
+    g.__prospectorMigrated = migrations.length;
   }
   return g.__prospectorDb;
 }
