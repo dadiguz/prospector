@@ -273,7 +273,7 @@ export async function startSearch(_: FormState, fd: FormData): Promise<FormState
   const c = String(fd.get("canal") ?? "correo");
   const canal: CanalBusqueda = c === "whatsapp" || c === "cualquiera" ? c : "correo";
   try {
-    await startSearchJob(segmentId, cuantos, presupuesto, canal);
+    await startSearchJob(segmentId, cuantos, presupuesto, canal, String(fd.get("indicaciones") ?? ""));
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -545,4 +545,38 @@ export async function tagProspects(projectId: number, prospectIds: number[], nom
 export async function untagProspect(prospectId: number, labelId: number) {
   run("DELETE FROM label_links WHERE prospect_id = ? AND label_id = ? AND label_id IN (SELECT id FROM labels WHERE tipo = 'usuario')", prospectId, labelId);
   refresh();
+}
+
+/* ---------- Segmentos (edición en la página del proyecto) ---------- */
+
+const SegmentInput = z.object({
+  nombre: z.string().trim().min(3, "El segmento necesita un nombre."),
+  definicion: z.string().trim().min(10, "Describe el segmento en una o dos frases."),
+  consultas: z.array(z.string().trim()).transform((xs) => xs.filter(Boolean)),
+});
+
+export async function saveSegment(projectId: number, segmentId: number | null, input: { nombre: string; definicion: string; consultas: string[] }): Promise<FormState> {
+  const p = SegmentInput.safeParse(input);
+  if (!p.success) return { error: p.error.issues[0].message };
+  const { nombre, definicion, consultas } = p.data;
+  if (segmentId) {
+    const s = get<{ id: number }>("SELECT id FROM segments WHERE id = ? AND project_id = ?", segmentId, projectId);
+    if (!s) return { error: "Segmento no encontrado." };
+    run("UPDATE segments SET nombre = ?, definicion = ?, consultas_json = ? WHERE id = ?", nombre, definicion, JSON.stringify(consultas), segmentId);
+  } else {
+    // El segmento nuevo usa el gancho y la plantilla del proyecto.
+    const hook = get<{ id: number }>("SELECT id FROM hooks WHERE project_id = ? ORDER BY id LIMIT 1", projectId);
+    const tpl = get<{ id: number }>("SELECT id FROM templates WHERE project_id = ? AND canal = 'correo' AND estado = 'activa' ORDER BY id LIMIT 1", projectId);
+    run("INSERT INTO segments (project_id, nombre, definicion, consultas_json, hook_id, template_id) VALUES (?, ?, ?, ?, ?, ?)",
+      projectId, nombre, definicion, JSON.stringify(consultas), hook?.id ?? null, tpl?.id ?? null);
+  }
+  audit(readProfile()?.correo ?? "owner", segmentId ? "segmento_editado" : "segmento_creado", nombre);
+  refresh();
+  return { ok: true, message: segmentId ? "Segmento guardado." : "Segmento agregado." };
+}
+
+export async function archiveSegment(projectId: number, segmentId: number): Promise<FormState> {
+  run("UPDATE segments SET estado = 'archivado' WHERE id = ? AND project_id = ?", segmentId, projectId);
+  refresh();
+  return { ok: true, message: "Segmento archivado. Sus prospectos y búsquedas se conservan." };
 }

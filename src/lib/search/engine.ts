@@ -136,7 +136,7 @@ const CANAL_PROMPT: Record<CanalBusqueda, { descubrir: string; investigar: strin
   },
 };
 
-export async function startSearchJob(segmentId: number, cuantos: number, presupuestoUsd: number, canal: CanalBusqueda = "correo") {
+export async function startSearchJob(segmentId: number, cuantos: number, presupuestoUsd: number, canal: CanalBusqueda = "correo", indicaciones = "") {
   if (!(await getSecret("anthropic_api_key"))) throw new NoApiKeyError();
   const seg = get<{ project_id: number; nombre: string }>("SELECT project_id, nombre FROM segments WHERE id = ?", segmentId);
   if (!seg) throw new Error("Segmento no encontrado");
@@ -150,7 +150,7 @@ export async function startSearchJob(segmentId: number, cuantos: number, presupu
     );
     const id = Number(
       run("INSERT INTO jobs (project_id, tipo, search_run_id, presupuesto_json) VALUES (?, 'busqueda', ?, ?)",
-        seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, canal, maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
+        seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, canal, indicaciones: indicaciones.trim().slice(0, 2000), maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
     );
     run("INSERT INTO job_steps (job_id, orden, tipo, clave) VALUES (?, 0, 'descubrir', 'descubrir')", id);
     ensureRunTag(runId);
@@ -188,8 +188,8 @@ function startQueued(): boolean {
 export async function repeatSearchJob(jobId: number) {
   const j = get<{ presupuesto_json: string }>("SELECT presupuesto_json FROM jobs WHERE id = ?", jobId);
   if (!j) throw new Error("Búsqueda no encontrada");
-  const b = json<{ usd: number; cuantos: number; segmentId: number; canal?: CanalBusqueda }>(j.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0 });
-  return startSearchJob(b.segmentId, b.cuantos, b.usd, b.canal ?? "correo");
+  const b = json<{ usd: number; cuantos: number; segmentId: number; canal?: CanalBusqueda; indicaciones?: string }>(j.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0 });
+  return startSearchJob(b.segmentId, b.cuantos, b.usd, b.canal ?? "correo", b.indicaciones ?? "");
 }
 
 export function cancelJob(jobId: number) {
@@ -245,7 +245,7 @@ async function runJob(jobId: number) {
     for (;;) {
       const job = get<{ estado: string; project_id: number; search_run_id: number; presupuesto_json: string }>("SELECT * FROM jobs WHERE id = ?", jobId);
       if (!job || job.estado !== "en_curso") return;
-      const budget = json<{ usd: number; cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda }>(job.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0, maxCandidatos: 20 });
+      const budget = json<{ usd: number; cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda; indicaciones?: string }>(job.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0, maxCandidatos: 20 });
       const canal = budget.canal ?? "correo";
       const gastado = get<{ s: number }>("SELECT COALESCE(SUM(costo_usd),0) s FROM usage_log WHERE job_id = ?", jobId)!.s;
       // "Listo" depende del canal pedido: correo verificado (lista A), WhatsApp, o cualquiera de los dos.
@@ -292,7 +292,7 @@ async function runJob(jobId: number) {
         const out =
           step.tipo === "descubrir"
             ? await stepDiscover(jobId, job.project_id, job.search_run_id, budget, json<{ ronda?: number }>(step.entrada_json, {}).ronda ?? 1)
-            : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }), canal);
+            : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }), canal, budget.indicaciones ?? "");
         run("UPDATE job_steps SET estado = 'hecho', salida_json = ?, error = NULL, actualizado_en = datetime('now') WHERE id = ?", JSON.stringify(out), step.id);
       } catch (e) {
         if (e instanceof PausedError) {
@@ -330,7 +330,7 @@ async function stepDiscover(
   jobId: number,
   projectId: number,
   runId: number,
-  budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda },
+  budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda; indicaciones?: string },
   ronda = 1,
 ) {
   const ctx = projectContext(projectId, budget.segmentId);
@@ -368,6 +368,7 @@ async function stepDiscover(
 
 Encuentra hasta ${pedidos} organizaciones candidatas para este segmento, en México, fuera de los estados excluidos.
 ${CANAL_PROMPT[budget.canal ?? "correo"].descubrir}
+${budget.indicaciones ? `INDICACIONES DEL USUARIO PARA ESTA BÚSQUEDA (síguelas; tienen prioridad sobre las sugerencias del segmento, no sobre las reglas): ${budget.indicaciones}` : ""}
 ${ANGULOS[ronda - 1] ?? ANGULOS[ANGULOS.length - 1]}
 ${conocidos.length ? `Estas ya las tenemos; NO las propongas otra vez: ${conocidos.join("; ")}.` : ""}
 Prioriza las que cumplan los atributos de mayor peso del perfil y muestren el dolor que resolvemos.${ctx.investigacion ? `\nContexto del proyecto: ${ctx.investigacion}` : ""}
@@ -437,6 +438,7 @@ async function stepInvestigate(
   segmentId: number,
   cand: { nombre: string; sitio_web: string | null; ciudad: string | null; estado: string | null; por_que: string },
   canal: CanalBusqueda = "correo",
+  indicaciones = "",
 ) {
   const ctx = projectContext(projectId, segmentId);
   const settings = readSettings();
@@ -455,6 +457,7 @@ ${cand.nombre} — ${cand.sitio_web ?? "sitio desconocido"} — ${cand.ciudad ??
 Por qué podría encajar: ${cand.por_que}
 
 ${CANAL_PROMPT[canal].investigar}
+${indicaciones ? `Indicaciones del usuario para esta búsqueda: ${indicaciones}` : ""}
 Necesito: qué es y su tamaño (verificado vs SUPOSICIÓN), cómo resuelve hoy lo que nuestro producto resuelve (cita textual del dolor si existe), correo público del negocio con la URL exacta donde aparece (busca en contacto, pie de página, aviso de privacidad y términos), WhatsApp o Instagram públicos, nombre de quién decide solo si está publicado, cuáles atributos del perfil cumple, qué descalificadores aplican y qué no se le debe prometer.
 ${ctx.investigacion ? `Además, para este proyecto: ${ctx.investigacion}` : ""}
 Propón una observación "Vimos que…" sobre algo específico y verificado, el asunto y la siguiente oportunidad concreta para proponerles (no algo que ya tengan resuelto).`,

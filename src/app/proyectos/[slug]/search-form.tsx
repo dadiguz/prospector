@@ -4,12 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { startSearch } from "@/app/actions";
 import { toast } from "@/components/toaster";
+import { Field } from "@/components/wand-field";
 
 /**
  * Lanzar una búsqueda para un segmento. Mientras haya una búsqueda de este segmento en curso o en cola,
  * el botón dice "En curso" y no se puede volver a lanzar (las de otros segmentos sí).
  */
-export function SearchForm({ segmentId, segmento, defaultBudget, enCurso }: { segmentId: number; segmento: string; defaultBudget: number; enCurso: boolean }) {
+export function SearchForm({ segmentId, segmento, defaultBudget, enCurso, contexto = "" }: { segmentId: number; segmento: string; defaultBudget: number; enCurso: boolean; contexto?: string }) {
+  const [indicaciones, setIndicaciones] = useState("");
   const [pending, start] = useTransition();
   const [lanzada, setLanzada] = useState(false); // optimista: hasta que la página se refresque con el estado real
   const router = useRouter();
@@ -17,7 +19,7 @@ export function SearchForm({ segmentId, segmento, defaultBudget, enCurso }: { se
 
   return (
     <form
-      className="flex flex-col items-end gap-2"
+      className="mt-4 flex flex-col gap-3 border-t border-line pt-4"
       action={(fd) =>
         start(async () => {
           const r = await startSearch(null, fd);
@@ -35,6 +37,16 @@ export function SearchForm({ segmentId, segmento, defaultBudget, enCurso }: { se
       }
     >
       <input type="hidden" name="segmentId" value={segmentId} />
+      <input type="hidden" name="indicaciones" value={indicaciones} />
+      <Field
+        label="Indicaciones para esta búsqueda (opcional)"
+        rows={2}
+        value={indicaciones}
+        onChange={setIndicaciones}
+        campo="instrucciones_busqueda"
+        contexto={contexto}
+        placeholder="Ej. solo Tijuana y Mexicali, plantas de más de 300 operadores, que fabriquen arneses; evita las que ya usan MES"
+      />
       <div className="flex flex-wrap items-end justify-end gap-2">
         <label className="text-xs text-ink-2">
           Contacto

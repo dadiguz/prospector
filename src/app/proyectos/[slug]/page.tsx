@@ -8,7 +8,7 @@ import { readSettings } from "@/lib/profile";
 import { PageTitle, Section, Fold, Badge, TagChip } from "@/components/ui";
 import { AutoRefresh, ActionButton } from "@/components/client";
 import { cancelJob, repeatSearch } from "@/app/actions";
-import { SearchForm } from "./search-form";
+import { SegmentCard, NewSegment } from "./segment-card";
 
 const JOB_LABEL: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neutral" | "accent" }> = {
   pendiente: { label: "En cola", tone: "neutral" },
@@ -25,6 +25,8 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
   if (!project) notFound();
   const d = await projectDetail(project.id);
   const settings = readSettings();
+  // Contexto para la varita: lo esencial del proyecto, sin datos de prospectos.
+  const contextoWand = `Proyecto: ${project.nombre}\nPropuesta de valor: ${project.propuesta_valor}\nPerfil: ${d.weights.map((w) => `${w.descripcion} (${w.peso})`).join("; ")}`;
   const activeJob = d.jobs.some((j) => ["pendiente", "en_curso", "en_pausa"].includes(j.estado));
   const si = d.facts.filter((f) => f.tipo === "si_afirmar");
   const no = d.facts.filter((f) => f.tipo === "no_afirmar" || f.tipo === "no_mencionar");
@@ -95,21 +97,15 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
         )}
         <div className="space-y-3">
           {d.segments.map((s) => (
-            <div key={s.id} className="card p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 max-w-2xl">
-                  <h3 className="font-medium">{s.nombre}</h3>
-                  <p className="mt-1 text-sm text-ink-2">{s.definicion}</p>
-                  {s.enviados > 0 && (
-                    <p className="mt-2 text-xs text-ink-3">
-                      {s.enviados} enviados · {s.positivos} positivos
-                    </p>
-                  )}
-                </div>
-                <SearchForm segmentId={s.id} segmento={s.nombre} defaultBudget={settings.presupuestoBusquedaUsd} enCurso={s.activos > 0} />
-              </div>
-            </div>
+            <SegmentCard
+              key={s.id}
+              projectId={project.id}
+              seg={{ id: s.id, nombre: s.nombre, definicion: s.definicion, consultas: json<string[]>(s.consultas_json, []), enviados: s.enviados, positivos: s.positivos, activos: s.activos }}
+              contexto={contextoWand}
+              defaultBudget={settings.presupuestoBusquedaUsd}
+            />
           ))}
+          <NewSegment projectId={project.id} contexto={contextoWand} />
         </div>
       </Section>
 

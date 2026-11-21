@@ -38,6 +38,8 @@ export const CAMPOS = {
   plantilla_correo:
     'Primer correo en frío: 5 a 8 líneas; saludo; quiénes somos en una frase; una observación específica ("{observacion}"); qué cambia, con UN solo gancho y cifra aproximada; propuesta de prueba sin compromiso; cierre preguntando con quién platicarlo; termina en "Saludos cordiales," sin nombre. Sin enlaces ni dominios. Conserva exactamente las variables entre llaves que ya existan.',
   plantilla_whatsapp: "Mensaje de WhatsApp: tres párrafos cortos, cálido, termina con una pregunta. Conserva las variables entre llaves.",
+  instrucciones_busqueda:
+    "Indicaciones para UNA búsqueda de prospectos: dónde buscar, qué tamaño, qué incluir o excluir y qué señales priorizar. Frases cortas y concretas que un investigador pueda seguir; sin cambiar el segmento ni prometer nada al prospecto.",
   investigacion:
     "Instrucciones para el investigador: qué datos buscar de cada prospecto además de lo básico (cómo resuelven hoy el problema, momento de compra, precios), y qué señales importan.",
 } as const;
