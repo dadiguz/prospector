@@ -36,7 +36,50 @@ export function render(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{([a-z_]+)\}/g, (all, k) => (vars[k] != null && vars[k] !== "" ? vars[k] : all));
 }
 
-export function buildDraft(prospectId: number, profile: Profile) {
+const VAR = /\{[a-z_]+\}/;
+
+/**
+ * "Sin variables": si a un prospecto le falta un dato, se quita la frase que lo usaba en vez de dejar {variable}.
+ * En el asunto se quitan los complementos ("de {evento_siguiente}"). Devuelve qué frases se quitaron.
+ */
+// Variables con un valor neutro: se reemplazan en vez de quitar la frase.
+const NEUTRO: Record<string, string> = {
+  observacion: "",
+  observacion_corta: "",
+  evento_siguiente: "su siguiente evento",
+  saludo: "Hola:",
+  nombre: "",
+};
+
+export function stripMissing(asunto: string, cuerpo: string, nombreProspecto?: string): { asunto: string; cuerpo: string; quitadas: string[] } {
+  const quitadas: string[] = [];
+  cuerpo = cuerpo
+    .replace(/\{([a-z_]+)\}/g, (m, k: string) => (k in NEUTRO ? NEUTRO[k] : m))
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^[ \t]+/gm, "");
+  const parrafos = cuerpo.split(/\n{2,}/).map((p) => {
+    if (!VAR.test(p)) return p;
+    // Línea suelta (saludo, cierre) con variable: se quita entera.
+    if (!/[.!?¿¡]/.test(p.replace(/\{[a-z_]+\}/g, ""))) {
+      quitadas.push(p.trim());
+      return "";
+    }
+    const frases = p.split(/(?<=[.!?])\s+/);
+    return frases
+      .filter((f) => {
+        if (!VAR.test(f)) return true;
+        quitadas.push(f.trim());
+        return false;
+      })
+      .join(" ");
+  });
+  let a = asunto.replace(/\s*\b(de|del|para|en|con)\s+\{[a-z_]+\}/gi, "").replace(/\{[a-z_]+\}/g, "").replace(/\s{2,}/g, " ").trim();
+  a = a.replace(/\b(de|del|para|en|con)\s*$/i, "").trim();
+  if (a.length < 14) a = nombreProspecto ? `Una idea para ${nombreProspecto}`.slice(0, 90) : "Una idea para ustedes";
+  return { asunto: a, cuerpo: parrafos.filter((p) => p.trim()).join("\n\n"), quitadas };
+}
+
+export function buildDraft(prospectId: number, profile: Profile, opts: { sinVariables?: boolean } = {}) {
   const p = get<{ project_id: number; ficha_json: string; organization_id: number; nombre: string; segment_id: number | null }>(
     `SELECT p.project_id, p.ficha_json, p.organization_id, o.nombre, p.segment_id FROM prospects p JOIN organizations o ON o.id = p.organization_id WHERE p.id = ?`,
     prospectId,
@@ -72,8 +115,9 @@ export function buildDraft(prospectId: number, profile: Profile) {
     evento_siguiente: eventoSiguiente(ficha),
     que_venden: queVenden,
   };
-  const asunto = typeof ficha.asunto === "string" && ficha.asunto ? ficha.asunto : render(tpl.asunto, vars);
-  const cuerpo = render(tpl.cuerpo, vars).replace(/\n{3,}/g, "\n\n");
+  let asunto = typeof ficha.asunto === "string" && ficha.asunto ? ficha.asunto : render(tpl.asunto, vars);
+  let cuerpo = render(tpl.cuerpo, vars).replace(/\n{3,}/g, "\n\n");
+  if (opts.sinVariables) ({ asunto, cuerpo } = stripMissing(asunto, cuerpo, p.nombre));
   const issues = validateEmail(asunto, cuerpo, validatorContext(p.project_id, ficha));
 
   const para =

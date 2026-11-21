@@ -25,6 +25,7 @@ const checks = () => [...document.querySelectorAll<HTMLInputElement>('input[name
 export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; slug: string; tagId: number | null; total: number }) {
   const [count, setCount] = useState(0);
   const [tagName, setTagName] = useState("");
+  const [sinVariables, setSinVariables] = useState(true);
   const [state, setState] = useState<(FormState & { creados?: number }) | null>(null);
   const [pending, start] = useTransition();
 
@@ -58,6 +59,10 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
       </button>
       <span className="text-ink-3">{count} seleccionado(s)</span>
       <div className="ml-auto flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-xs text-ink-2" title="Si a un prospecto le falta un dato (cifra, observación), se quita esa frase en vez de dejar {variable}">
+          <input type="checkbox" checked={sinVariables} onChange={(e) => setSinVariables(e.target.checked)} className="accent-[var(--accent)]" />
+          Sin variables
+        </label>
         <input className="input w-40 py-1.5" placeholder="Nueva etiqueta" value={tagName} onChange={(e) => setTagName(e.target.value)} />
         <button
           type="button"
@@ -71,7 +76,7 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
           type="button"
           className="btn btn-primary"
           disabled={!count || pending}
-          onClick={() => start(async () => setState(await createDraftsBulk(selected())))}
+          onClick={() => start(async () => setState(await createDraftsBulk(selected(), sinVariables)))}
         >
           {pending ? "Trabajando…" : `Crear borradores (${count})`}
         </button>

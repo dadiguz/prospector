@@ -3,11 +3,11 @@
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { z } from "zod";
-import { audit, get, json, run, tx } from "@/lib/db";
+import { all, audit, get, json, run, tx } from "@/lib/db";
 import { ProfileSchema, readProfile, readSettings, writeProfile, writeSettings, SettingsSchema } from "@/lib/profile";
 import { deleteSecret, setSecret } from "@/lib/secrets";
 import { validateApiKey, write as llmWrite, NoApiKeyError } from "@/lib/llm";
-import { buildDraft, contactBlocker, validatorContext } from "@/lib/drafts";
+import { buildDraft, contactBlocker, validatorContext, stripMissing } from "@/lib/drafts";
 import { blocks, validateEmail } from "@/lib/validator";
 import { recordReplyEvent } from "@/lib/replies";
 import { domainOf } from "@/lib/text";
@@ -76,7 +76,7 @@ export async function saveSettings(_: FormState, fd: FormData): Promise<FormStat
 
 /* ---------- Prospectos ---------- */
 
-export async function createDraft(prospectId: number): Promise<FormState> {
+export async function createDraft(prospectId: number, sinVariables = true): Promise<FormState> {
   const profile = requireProfile();
   const p = get<{ project_id: number; estado: string; lista: string }>("SELECT project_id, estado, lista FROM prospects WHERE id = ?", prospectId);
   if (!p) return { error: "Prospecto no encontrado." };
@@ -84,7 +84,7 @@ export async function createDraft(prospectId: number): Promise<FormState> {
   if (!["investigado", "en_espera"].includes(p.estado)) return { error: p.estado === "borrador" ? "ya tiene borrador." : "ya fue contactado." };
   if (get("SELECT 1 FROM messages WHERE prospect_id = ? AND estado IN ('borrador','aprobado')", prospectId))
     return { error: "Ya tiene un borrador." };
-  const d = buildDraft(prospectId, profile);
+  const d = buildDraft(prospectId, profile, { sinVariables });
   if (!d.para) return { error: "No tiene correo verificado. Úsalo como contacto de WhatsApp." };
   const blocker = contactBlocker(d.para, p.project_id, prospectId);
   if (blocker) return { error: blocker };
@@ -512,12 +512,12 @@ export async function improveField(campo: string, etiqueta: string, valor: strin
 /* ---------- Acciones por lote y etiquetas ---------- */
 
 /** Crea borradores para los prospectos seleccionados; reporta los que se saltó y por qué. */
-export async function createDraftsBulk(prospectIds: number[]): Promise<FormState & { creados?: number }> {
+export async function createDraftsBulk(prospectIds: number[], sinVariables = true): Promise<FormState & { creados?: number }> {
   const ids = z.array(z.number().int()).max(200).parse(prospectIds);
   let creados = 0;
   const saltados: string[] = [];
   for (const id of ids) {
-    const r = await createDraft(id);
+    const r = await createDraft(id, sinVariables);
     if (r?.ok) creados++;
     else {
       const n = get<{ nombre: string }>("SELECT o.nombre FROM prospects p JOIN organizations o ON o.id = p.organization_id WHERE p.id = ?", id)?.nombre ?? `#${id}`;
@@ -579,4 +579,24 @@ export async function archiveSegment(projectId: number, segmentId: number): Prom
   run("UPDATE segments SET estado = 'archivado' WHERE id = ? AND project_id = ?", segmentId, projectId);
   refresh();
   return { ok: true, message: "Segmento archivado. Sus prospectos y búsquedas se conservan." };
+}
+
+/** Quita las variables sin llenar de los borradores (frases sin dato) y los vuelve a validar. */
+export async function removeDraftVariables(projectId: number, messageIds?: number[]): Promise<FormState> {
+  const rows = all<{ id: number; asunto: string; cuerpo: string; nombre: string; ficha_json: string }>(
+    `SELECT m.id, m.asunto, m.cuerpo, o.nombre, p.ficha_json FROM messages m JOIN prospects p ON p.id = m.prospect_id
+     JOIN organizations o ON o.id = p.organization_id
+     WHERE p.project_id = ? AND m.estado IN ('borrador','aprobado') AND (m.cuerpo LIKE '%{%}%' OR m.asunto LIKE '%{%}%')`,
+    projectId,
+  ).filter((r) => !messageIds || messageIds.includes(r.id));
+  if (!rows.length) return { ok: true, message: "No hay borradores con variables." };
+  tx(() => {
+    for (const r of rows) {
+      const s = stripMissing(r.asunto, r.cuerpo, r.nombre);
+      const issues = validateEmail(s.asunto, s.cuerpo, validatorContext(projectId, json(r.ficha_json, {})));
+      run("UPDATE messages SET asunto = ?, cuerpo = ?, validacion_json = ? WHERE id = ?", s.asunto, s.cuerpo, JSON.stringify(issues), r.id);
+    }
+  });
+  refresh();
+  return { ok: true, message: `${rows.length} borrador(es) sin variables. Revisa que se lean bien.` };
 }

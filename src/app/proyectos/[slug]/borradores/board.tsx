@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { discardDraft, markSent, pushDraftsToGmail, sendTestToMe, sendViaGmail, updateDraft, type FormState } from "@/app/actions";
+import { discardDraft, markSent, removeDraftVariables, pushDraftsToGmail, sendTestToMe, sendViaGmail, updateDraft, type FormState } from "@/app/actions";
 import { ActionButton, CopyButton, FormMessage, StatefulForm } from "@/components/client";
 import type { Issue } from "@/lib/validator";
 import { TagChip } from "@/components/ui";
@@ -17,6 +17,7 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
   const [pending, start] = useTransition();
   const chosen = drafts.filter((d) => sel.includes(d.id));
   const restantes = Math.max(0, props.tope - props.enviadosHoy);
+  const conVariables = drafts.filter(tieneVariables).length;
   const run = (fn: () => Promise<FormState>, clearOnOk = true) =>
     start(async () => {
       const r = await fn();
@@ -31,6 +32,11 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
           {drafts.length} borradores · {listos.length} sin errores · hoy van {props.enviadosHoy} de {props.tope}
         </span>
         <div className="flex gap-2">
+          {conVariables > 0 && (
+            <ActionButton action={() => removeDraftVariables(props.projectId)} className="btn" pendingLabel="Quitando…">
+              Quitar variables ({conVariables})
+            </ActionButton>
+          )}
           <button type="button" className="btn btn-quiet" onClick={() => setSel(sel.length ? [] : listos.map((d) => d.id).slice(0, restantes))}>
             {sel.length ? "Quitar selección" : "Seleccionar los listos"}
           </button>
@@ -83,14 +89,16 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
 
       <ul className="space-y-4">
         {drafts.map((d) => (
-          <DraftCard key={d.id} d={d} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
+          <DraftCard key={d.id} d={d} projectId={props.projectId} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
         ))}
       </ul>
     </>
   );
 }
 
-function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean; selected: boolean; onToggle: () => void }) {
+const tieneVariables = (d: Draft) => /\{[a-z_]+\}/.test(d.asunto + d.cuerpo);
+
+function DraftCard({ d, gmail, selected, onToggle, projectId }: { d: Draft; gmail: boolean; selected: boolean; onToggle: () => void; projectId: number }) {
   const [editing, setEditing] = useState(false);
   const errors = d.issues.filter((i) => i.nivel === "error");
   const warns = d.issues.filter((i) => i.nivel === "aviso");
@@ -119,7 +127,16 @@ function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean;
 
       {(errors.length > 0 || warns.length > 0) && (
         <ul className="mt-4 space-y-1 text-sm">
-          {errors.map((i, k) => <li key={`e${k}`} className="text-bad">✕ {i.regla}: {i.detalle}</li>)}
+          {errors.map((i, k) => (
+            <li key={`e${k}`} className="flex flex-wrap items-center gap-2 text-bad">
+              <span>✕ {i.regla}: {i.detalle}</span>
+              {i.regla === "Variables sin llenar" && (
+                <ActionButton action={() => removeDraftVariables(projectId, [d.id])} className="btn btn-quiet py-0.5 text-xs" pendingLabel="Quitando…">
+                  Quitar variables
+                </ActionButton>
+              )}
+            </li>
+          ))}
           {warns.map((i, k) => <li key={`w${k}`} className="text-warn">! {i.regla}: {i.detalle}</li>)}
         </ul>
       )}
