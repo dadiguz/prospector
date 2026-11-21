@@ -142,6 +142,8 @@ export async function research(opts: {
   blockedDomains?: string[];
   /** Avisos en vivo: qué busca o qué página lee. */
   onActivity?: (texto: string) => void;
+  /** Largo mínimo de una respuesta útil; si queda por debajo se pide el cierre. */
+  minRespuesta?: number;
 }): Promise<{ text: string; urls: string[]; consumo: Consumo }> {
   const c = await client();
   const model = modelFor(opts.tier);
@@ -213,6 +215,41 @@ export async function research(opts: {
   }
   if (!final) throw new Error("Sin respuesta del modelo");
   if (final.stop_reason === "refusal") throw new Error("El modelo no quiso completar esta investigación.");
+
+  // Cierre: si gastó sus búsquedas y terminó sin entregar la respuesta (solo una introducción o quedó en pausa),
+  // se le pide que entregue ya lo que encontró, sin buscar más. Evita rondas pagadas sin resultado.
+  if (final.stop_reason === "pause_turn" || text.trim().length < (opts.minRespuesta ?? 400)) {
+    if (final.stop_reason !== "pause_turn") messages.push({ role: "assistant", content: final.content });
+    messages.push({
+      role: "user",
+      content:
+        "Ya no busques ni leas más páginas. Con lo que ya encontraste, entrega ahora la respuesta completa en el formato pedido. Lo que no hayas verificado, márcalo como SUPOSICIÓN.",
+    });
+    const t0 = Date.now();
+    try {
+      const cierre = await c.beta.messages
+        .stream({
+          model,
+          max_tokens: 16000,
+          system: opts.system,
+          output_config: { effort: "low" },
+          tools,
+          tool_choice: { type: "none" },
+          messages,
+          ...(supportsFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
+        })
+        .finalMessage();
+      const u = logUsage(`${opts.paso}_cierre`, cierre.model ?? model, cierre.usage as UsageLike, Date.now() - t0, opts.jobId);
+      total.costoUsd += u.costoUsd;
+      total.tokensEntrada += u.tokensEntrada;
+      total.tokensSalida += u.tokensSalida;
+      for (const block of cierre.content) if (block.type === "text") text += `\n${block.text}`;
+      opts.onActivity?.("Pidió la respuesta final con lo ya encontrado");
+    } catch (e) {
+      if (e instanceof Anthropic.RateLimitError) toPaused(e);
+      // Si el cierre falla, se sigue con el texto que haya.
+    }
+  }
   if (!text.trim()) throw new Error(`El modelo no devolvió texto (terminó por ${final.stop_reason}).`);
   return { text, urls: [...urls], consumo: total };
 }

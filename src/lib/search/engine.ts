@@ -65,7 +65,9 @@ const fichaBase = {
   cuando_mandar: z.string().nullable(),
   idioma: z.enum(["es", "en"]),
   evidencia: z.array(z.object({ url: z.string(), que_demuestra: z.string(), cita: z.string().nullable(), tipo: z.enum(["verificado", "suposicion"]) })),
-  descalificadores: z.array(z.string()).describe("Descalificadores duros del proyecto que aplican, textual; vacío si ninguno"),
+  descalificadores: z
+    .array(z.string())
+    .describe("Descalificadores duros del proyecto que aplican CONFIRMADOS con evidencia; vacío si ninguno. No incluyas la falta de correo (eso lo decide el canal) ni sospechas sin confirmar (van en pegas)."),
 };
 // El buzón nominal lo decide el código, no el modelo.
 const CALCULADOS = new Set(["buzon_nominal_u_operativo"]);
@@ -99,7 +101,9 @@ ${weights.map((w) => `- ${w.descripcion} (${w.peso > 0 ? "+" : ""}${w.peso})`).j
 DESCALIFICADORES:
 ${dq.map((d) => `- [${d.tipo}] ${d.regla}`).join("\n")}
 
-TERRITORIO: todo México excepto ${json<string[]>(terr?.excluidos_json, []).join(", ") || "nada"}.`,
+TERRITORIO: todo México excepto ${json<string[]>(terr?.excluidos_json, []).join(", ") || "nada"}.
+
+FECHA DE HOY: ${new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}. Busca la siguiente edición o temporada (los próximos 3 a 12 meses); lo que ya pasó solo sirve como evidencia. En las consultas usa el año de la siguiente edición.`,
     investigacion: String(cfg.investigacion ?? ""),
   };
 }
@@ -489,7 +493,15 @@ async function savePropsect(projectId: number, runId: number, segmentId: number,
   if (f.pais && f.pais.toUpperCase() !== "MX") motivo = `Fuera de México (${f.pais}); revisar reglas de correo comercial de ese país`;
   else if (estado && excluidos.includes(estado)) motivo = `Fuera de territorio (${estado})`;
   else if (f.cobra_en_usd) motivo = "Cobra en USD";
-  else if (f.descalificadores.length) motivo = f.descalificadores.join("; ");
+  // Descalificadores: "sin correo" no descarta (lo decide el canal: pasa a WhatsApp/IG si los hay), y lo que el
+  // investigador no confirmó ("probablemente", "por verificar") no descarta: baja a la lista B como pega.
+  const DUDA = /(probabl|posible|por verificar|no (se )?(confirm|verific)|sin confirmar|quiz[aá]s|parece)/i;
+  const SIN_CORREO = /(sin correo|correo p[uú]blico|no (hay|tiene|publica) correo)/i;
+  const dqs = f.descalificadores.flatMap((d) => d.split(/;\s*/)).map((d) => d.trim()).filter((d) => d && !SIN_CORREO.test(d));
+  const dudosos = dqs.filter((d) => DUDA.test(d));
+  const firmes = dqs.filter((d) => !DUDA.test(d));
+  if (dudosos.length) f.pegas = [f.pegas, `Por confirmar: ${dudosos.join("; ")}`].filter(Boolean).join(" · ");
+  if (!motivo && firmes.length) motivo = firmes.join("; ");
 
   if (correo && !motivo) {
     // Sin URL de fuente, o buzón de pagos u ofuscado: el correo no se usa (correoOk queda en false).
@@ -508,7 +520,7 @@ async function savePropsect(projectId: number, runId: number, segmentId: number,
   const lista: "A" | "B" | "solo_wa_ig" | "descartado" = motivo
     ? "descartado"
     : correoOk
-      ? sc.score >= 50 && f.tamano_verificado ? "A" : "B"
+      ? sc.score >= 50 && f.tamano_verificado && !dudosos.length ? "A" : "B"
       : f.whatsapp || f.instagram
         ? "solo_wa_ig"
         : "descartado";
