@@ -136,8 +136,6 @@ export async function startSearchJob(segmentId: number, cuantos: number, presupu
   if (!(await getSecret("anthropic_api_key"))) throw new NoApiKeyError();
   const seg = get<{ project_id: number; nombre: string }>("SELECT project_id, nombre FROM segments WHERE id = ?", segmentId);
   if (!seg) throw new Error("Segmento no encontrado");
-  const activo = get("SELECT 1 FROM jobs WHERE project_id = ? AND estado IN ('pendiente','en_curso','en_pausa')", seg.project_id);
-  if (activo) throw new Error("Ya hay una búsqueda en curso en este proyecto.");
   const jobId = tx(() => {
     const algo = get<{ id: number }>("SELECT id FROM algorithm_versions WHERE project_id = ? ORDER BY id DESC LIMIT 1", seg.project_id);
     const runId = Number(
@@ -155,8 +153,31 @@ export async function startSearchJob(segmentId: number, cuantos: number, presupu
     return id;
   });
   audit("owner", "busqueda_iniciada", `job ${jobId}, segmento ${segmentId}, ${cuantos} sólidos, canal ${canal}, US$${presupuestoUsd}`);
-  void runJob(jobId);
+  if (!startQueued()) logActivity(jobId, `En cola: hay ${maxSimultaneas()} búsquedas corriendo; empieza cuando termine una`);
   return jobId;
+}
+
+/* ---------- Varias búsquedas a la vez ---------- */
+
+const maxSimultaneas = () => readSettings().busquedasSimultaneas;
+const corriendo = () => get<{ c: number }>("SELECT COUNT(*) c FROM jobs WHERE estado = 'en_curso'")!.c;
+
+/**
+ * Arranca búsquedas en cola mientras haya lugar (límite en Ajustes). Devuelve true si arrancó alguna.
+ * runJob marca el job como en curso antes de su primer await, así que el conteo se actualiza al instante.
+ */
+function startQueued(): boolean {
+  let arranco = false;
+  for (;;) {
+    if (corriendo() >= maxSimultaneas()) return arranco;
+    const sig = get<{ id: number }>(
+      "SELECT id FROM jobs WHERE estado = 'pendiente' AND (reanudar_despues IS NULL OR reanudar_despues <= ?) ORDER BY id LIMIT 1",
+      new Date().toISOString(),
+    );
+    if (!sig || running.has(sig.id)) return arranco;
+    void runJob(sig.id);
+    arranco = true;
+  }
 }
 
 /** Repite una búsqueda con los mismos parámetros; lo ya encontrado se excluye. */
@@ -171,16 +192,21 @@ export function cancelJob(jobId: number) {
   run("UPDATE jobs SET estado = 'cancelado', mensaje = 'Cancelada por el usuario', actualizado_en = datetime('now') WHERE id = ? AND estado IN ('pendiente','en_curso','en_pausa')", jobId);
   run("UPDATE job_steps SET estado = 'omitido' WHERE job_id = ? AND estado IN ('pendiente','en_pausa')", jobId);
   clearTimeout(timers.get(jobId));
+  startQueued();
 }
 
-/** Al arrancar: retoma lo que quedó a medias (en_curso pasa a pendiente; nada que esté "hecho" se repite). */
+/** Al arrancar: retoma lo que quedó a medias (nada que esté "hecho" se repite), respetando el límite de simultáneas. */
 export function resumeJobs() {
-  const jobs = all<{ id: number; reanudar_despues: string | null }>("SELECT id, reanudar_despues FROM jobs WHERE estado IN ('pendiente','en_curso','en_pausa')");
+  const jobs = all<{ id: number; estado: string; reanudar_despues: string | null }>("SELECT id, estado, reanudar_despues FROM jobs WHERE estado IN ('pendiente','en_curso','en_pausa')");
   for (const j of jobs) {
     run("UPDATE job_steps SET estado = 'pendiente' WHERE job_id = ? AND estado IN ('en_curso','en_pausa')", j.id);
-    const wait = j.reanudar_despues ? Math.max(0, new Date(j.reanudar_despues).getTime() - Date.now()) : 0;
-    schedule(j.id, wait);
+    if (j.estado === "en_pausa" && j.reanudar_despues) {
+      schedule(j.id, Math.max(0, new Date(j.reanudar_despues).getTime() - Date.now()));
+    } else {
+      run("UPDATE jobs SET estado = 'pendiente' WHERE id = ?", j.id);
+    }
   }
+  startQueued();
 }
 
 /** Bitácora en vivo del job: las últimas líneas de lo que está haciendo (para la pantalla). */
@@ -203,6 +229,8 @@ function schedule(jobId: number, ms: number) {
 function finish(jobId: number, estado: "hecho" | "fallo", mensaje: string) {
   run("UPDATE job_steps SET estado = 'omitido' WHERE job_id = ? AND estado = 'pendiente'", jobId);
   run("UPDATE jobs SET estado = ?, mensaje = ?, actualizado_en = datetime('now') WHERE id = ?", estado, mensaje, jobId);
+  // Al liberar un lugar, la siguiente de la cola arranca (después de que este job salga del set de "corriendo").
+  setTimeout(startQueued, 0);
 }
 
 async function runJob(jobId: number) {
@@ -267,6 +295,7 @@ async function runJob(jobId: number) {
           run("UPDATE job_steps SET estado = 'pendiente', intentos = intentos - 1 WHERE id = ?", step.id);
           run("UPDATE jobs SET estado = 'en_pausa', reanudar_despues = ?, mensaje = ? WHERE id = ?", e.resumeAfter.toISOString(), e.message, jobId);
           schedule(jobId, e.resumeAfter.getTime() - Date.now());
+          setTimeout(startQueued, 0);
           return;
         }
         if (e instanceof NoApiKeyError) {
@@ -305,7 +334,12 @@ async function stepDiscover(
   const pedidos = budget.cuantos * 3;
   // Lo ya encontrado en el proyecto, más lo que esta búsqueda ya propuso o descartó, para que proponga organizaciones nuevas.
   const previos = json<string[]>(get<{ l: string }>("SELECT limites_json l FROM search_runs WHERE id = ?", runId)?.l, []).map((s) => s.split(":")[0]);
-  const enEsta = all<{ e: string }>("SELECT entrada_json e FROM job_steps WHERE job_id = ? AND tipo = 'investigar'", jobId).map((r) => json<{ nombre?: string }>(r.e, {}).nombre ?? "");
+  // Candidatos de esta búsqueda y de las otras que corren en el proyecto al mismo tiempo.
+  const enEsta = all<{ e: string }>(
+    `SELECT s.entrada_json e FROM job_steps s JOIN jobs j ON j.id = s.job_id
+     WHERE s.tipo = 'investigar' AND (s.job_id = ? OR (j.project_id = ? AND j.estado IN ('pendiente','en_curso','en_pausa')))`,
+    jobId, projectId,
+  ).map((r) => json<{ nombre?: string }>(r.e, {}).nombre ?? "");
   const conocidos = [
     ...new Set([
       ...enEsta,
@@ -497,6 +531,15 @@ async function savePropsect(projectId: number, runId: number, segmentId: number,
   };
 
   return tx(() => {
+    // Segunda revisión dentro de la transacción: otra búsqueda simultánea pudo guardarlo mientras se verificaba el correo.
+    const doms = [f.sitio_web ? safeHost(f.sitio_web) : null, correo && !isFreeMail(domainOf(correo)) ? domainOf(correo) : null].filter(Boolean) as string[];
+    const yaGuardado = get<{ id: number }>(
+      `SELECT p.id FROM prospects p JOIN organizations o ON o.id = p.organization_id
+       WHERE p.project_id = ? AND (o.nombre_norm = ? ${doms.length ? `OR EXISTS (SELECT 1 FROM json_each(o.dominios_json) j WHERE j.value IN (${doms.map(() => "?").join(",")}))` : ""})
+       LIMIT 1`,
+      projectId, norm(f.nombre), ...doms,
+    );
+    if (yaGuardado) return { prospecto: yaGuardado.id, lista: "repetido" as const, score: 0, motivo: "lo guardó otra búsqueda al mismo tiempo" };
     const host = f.sitio_web ? safeHost(f.sitio_web) : null;
     const dominios = [...new Set([host, correo && !isFreeMail(domainOf(correo)) ? domainOf(correo) : null].filter(Boolean))];
     const orgId = Number(

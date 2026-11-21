@@ -106,7 +106,7 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
                     </p>
                   )}
                 </div>
-                <SearchForm segmentId={s.id} defaultBudget={settings.presupuestoBusquedaUsd} disabled={activeJob} />
+                <SearchForm segmentId={s.id} defaultBudget={settings.presupuestoBusquedaUsd} disabled={false} />
               </div>
             </div>
           ))}

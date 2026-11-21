@@ -146,3 +146,12 @@ summary::-webkit-details-marker {
   border-radius: 4px;
   padding: 0 0.25rem;
 }
+
+/* Panel de búsquedas: en pantallas anchas se acomoda a la derecha y el contenido se recorre. */
+@media (min-width: 1280px) {
+  html[data-panel="1"] .app-main,
+  html[data-panel="1"] .app-header {
+    margin-left: max(1.5rem, calc((100vw - 21.5rem - 64rem) / 2));
+    margin-right: 21.5rem;
+  }
+}

@@ -36,7 +36,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
     <StatefulForm action={saveSettings} className="space-y-4">
       {(state, pending) => (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="label" htmlFor="topeDiario">Tope de correos por día</label>
               <input id="topeDiario" name="topeDiario" type="number" min={1} max={200} className="input" defaultValue={settings.topeDiario} />
@@ -48,6 +48,11 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             <div>
               <label className="label" htmlFor="busquedasWebPorCandidato">Búsquedas web por candidato</label>
               <input id="busquedasWebPorCandidato" name="busquedasWebPorCandidato" type="number" min={1} max={10} className="input" defaultValue={settings.busquedasWebPorCandidato} />
+            </div>
+            <div>
+              <label className="label" htmlFor="busquedasSimultaneas">Búsquedas a la vez</label>
+              <input id="busquedasSimultaneas" name="busquedasSimultaneas" type="number" min={1} max={5} className="input" defaultValue={settings.busquedasSimultaneas} />
+              <span className="mt-1 block text-xs text-ink-3">Las demás esperan en cola. Más a la vez = más límites de la API.</span>
             </div>
           </div>
           <label className="flex items-start gap-3 text-sm">

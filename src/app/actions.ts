@@ -66,6 +66,7 @@ export async function saveSettings(_: FormState, fd: FormData): Promise<FormStat
     presupuestoBusquedaUsd: Number(fd.get("presupuestoBusquedaUsd")),
     busquedasWebPorCandidato: Number(fd.get("busquedasWebPorCandidato")),
     modoEconomico: fd.get("modoEconomico") === "on",
+    busquedasSimultaneas: Number(fd.get("busquedasSimultaneas") ?? current.busquedasSimultaneas),
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   writeSettings(parsed.data);

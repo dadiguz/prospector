@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
+import { RunningPanel } from "@/components/running-panel";
 
 const ui = Inter({ variable: "--font-ui", subsets: ["latin"] });
 const title = Newsreader({ variable: "--font-title", subsets: ["latin"], weight: ["400", "500"] });
@@ -16,7 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="es" className={`${ui.variable} ${title.variable} antialiased`}>
       <body className="min-h-screen">
         <header className="border-b border-line">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
+          <div className="app-header mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
             <Link href="/" className="font-serif text-2xl tracking-tight text-ink">
               Prospector
             </Link>
@@ -26,7 +27,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6">{children}</main>
+        <main className="app-main mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6">{children}</main>
+        <RunningPanel />
       </body>
     </html>
   );
