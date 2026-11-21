@@ -12,6 +12,8 @@ import type { Canal } from "@/lib/queries";
 import { ProspectActions } from "./actions-client";
 import { BulkBar, RowCheckbox } from "./bulk";
 import { projectTags, tagsByProspect } from "@/lib/tags";
+import { lastSeen, esNuevo } from "@/lib/vistas";
+import { SeenTracker } from "@/components/seen-tracker";
 
 const LISTAS = [
   { key: "A", label: "A · Correo verificado" },
@@ -57,6 +59,8 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   }
   const { rows, counts, canales } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId, canal);
   const tagMap = tagsByProspect(rows.map((r) => r.id));
+  const desde = lastSeen(project.id, "prospectos");
+  const nuevos = rows.filter((r) => esNuevo(r.creado_en, desde)).length;
   const qs = (o: { lista?: string; todos?: boolean; tag?: number | null; canal?: Canal | null }) => {
     const p = new URLSearchParams();
     p.set("lista", o.lista ?? lista);
@@ -77,7 +81,9 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
 
   return (
     <>
+      <SeenTracker projectId={project.id} seccion="prospectos" />
       <PageTitle sub="Ordenados por probabilidad de respuesta. Abre una fila para ver la evidencia.">Prospectos</PageTitle>
+      {nuevos > 0 && <p className="-mt-4 mb-6 text-sm text-accent">{nuevos} nuevo(s) desde tu última visita, resaltados abajo.</p>}
       <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}&todos=1${canal ? `&canal=${canal}` : ""}` : qs({ tag: null }))} />
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {LISTAS.map((l) => {
@@ -143,13 +149,16 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
                   })
                 : null;
             return (
-              <li key={r.id}>
+              <li key={r.id} className={esNuevo(r.creado_en, desde) ? "border-l-2 border-accent bg-accent-soft/30" : ""}>
                 <details className="group">
                   <summary className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-4 hover:bg-[#fcfbf8] sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto_auto]">
                     <div className="flex min-w-0 items-start gap-3">
                       <RowCheckbox id={r.id} />
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{r.nombre}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-medium">{r.nombre}</span>
+                          {esNuevo(r.creado_en, desde) && <span className="shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nuevo</span>}
+                        </div>
                         <div className="truncate text-xs text-ink-2">{[str(f.lugar) || r.ciudad, r.estado_mx].filter(Boolean).join(" · ") || "Sin ubicación"}</div>
                         {(tagMap.get(r.id) ?? []).length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">

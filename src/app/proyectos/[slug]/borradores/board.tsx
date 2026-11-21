@@ -6,7 +6,7 @@ import { ActionButton, CopyButton, FormMessage, StatefulForm } from "@/component
 import type { Issue } from "@/lib/validator";
 import { TagChip } from "@/components/ui";
 
-type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[] };
+type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[]; nuevo?: boolean };
 
 export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remitente: string; gmailConectado: boolean; etiqueta: string; tope: number; enviadosHoy: number }) {
   const { drafts } = props;
@@ -95,12 +95,15 @@ function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean;
   const errors = d.issues.filter((i) => i.nivel === "error");
   const warns = d.issues.filter((i) => i.nivel === "aviso");
   return (
-    <li className={`card p-5 ${selected ? "border-accent" : ""}`}>
+    <li className={`card p-5 ${selected || d.nuevo ? "border-accent" : ""} ${d.nuevo ? "bg-accent-soft/20" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <label className="flex min-w-0 items-start gap-3">
           <input type="checkbox" checked={selected} onChange={onToggle} disabled={errors.length > 0 || !d.para} className="mt-1.5 accent-[var(--accent)]" />
           <span className="min-w-0">
-            <span className="block font-medium">{d.nombre}</span>
+            <span className="flex items-center gap-2 font-medium">
+              {d.nombre}
+              {d.nuevo && <span className="rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nuevo</span>}
+            </span>
             <span className="block font-mono text-xs text-ink-2">{d.para ?? "sin destinatario"}</span>
             {d.tags.length > 0 && (
               <span className="mt-1 flex flex-wrap gap-1">{d.tags.map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}</span>

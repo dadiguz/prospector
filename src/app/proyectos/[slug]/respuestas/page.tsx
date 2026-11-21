@@ -5,6 +5,9 @@ import { responseAnalysis } from "@/lib/analysis";
 import { PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL, TagChip, TagFilter } from "@/components/ui";
 import { projectTags, tagsByProspect } from "@/lib/tags";
 import { ReplyForm, SuggestButton, SyncButton, ReviewReply } from "./client";
+import { ReplyDetailButton } from "./detail";
+import { lastSeen, esNuevo } from "@/lib/vistas";
+import { SeenTracker } from "@/components/seen-tracker";
 import { gmailStatus } from "@/lib/gmail/oauth";
 import { CopyButton } from "@/components/client";
 
@@ -20,14 +23,18 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
   const { replies, sinRespuesta, retomar } = await listReplies(project.id, tagId);
   const tagMap = tagsByProspect(replies.map((r) => r.prospect_id));
+  const desde = lastSeen(project.id, "respuestas");
+  const nuevas = replies.filter((r) => esNuevo(r.creado_en, desde)).length;
   const a = responseAnalysis(project.id);
   const gmail = await gmailStatus();
   const sorted = [...replies].sort((x, y) => ORDER.indexOf(x.clasificacion) - ORDER.indexOf(y.clasificacion));
 
   return (
     <>
+      <SeenTracker projectId={project.id} seccion="respuestas" />
       <PageTitle sub="Clasificadas por tipo, con una sugerencia de respuesta en el tono del prospecto.">Respuestas</PageTitle>
 
+      {nuevas > 0 && <p className="-mt-4 mb-6 text-sm text-accent">{nuevas} respuesta(s) nueva(s) desde tu última visita, resaltadas abajo.</p>}
       <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} />
       <div className="card mb-10 grid grid-cols-2 gap-6 p-6 sm:grid-cols-5">
         <Stat label="Enviados" value={a.total.enviados} />
@@ -46,11 +53,12 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
               const l = CLASIF_LABEL[r.clasificacion] ?? CLASIF_LABEL.otro;
               const accionable = ["interesado", "acuse", "otro", "no_ahora"].includes(r.clasificacion);
               return (
-                <li key={r.id} className="card p-5">
+                <li key={r.id} className={`card p-5 ${esNuevo(r.creado_en, desde) ? "border-accent bg-accent-soft/20" : ""}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{r.nombre}</span>
+                        {esNuevo(r.creado_en, desde) && <span className="rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nueva</span>}
                         <Badge tone={l.tone}>{l.label}</Badge>
                         {r.pide && r.pide !== "nada" && <Badge tone="accent">Pide {r.pide === "info" ? "información" : r.pide}</Badge>}
                         {(tagMap.get(r.prospect_id) ?? []).map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}
@@ -60,7 +68,10 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
                         {[r.quien_respondio, r.fecha && new Date(r.fecha + "T12:00").toLocaleDateString("es-MX", { day: "numeric", month: "short" }), r.tanda].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    {accionable && !r.sugerencia && <SuggestButton replyId={r.id} />}
+                    <div className="flex flex-wrap gap-2">
+                      <ReplyDetailButton replyId={r.id} slug={project.slug} />
+                      {accionable && !r.sugerencia && <SuggestButton replyId={r.id} />}
+                    </div>
                   </div>
                   {!r.revisado_por_humano && <div className="mt-3"><ReviewReply replyId={r.id} actual={r.clasificacion} /></div>}
                   {r.sugerencia && (

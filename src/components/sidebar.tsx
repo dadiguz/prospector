@@ -95,6 +95,15 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
   const is = (p: string) => pathname === p;
   const starts = (p: string) => pathname.startsWith(p);
 
+  // Secciones visitadas desde que llegaron estos conteos: su contador ya no se muestra
+  // (el servidor los pone en cero en el siguiente refresco). Se reinicia cuando llegan conteos nuevos.
+  const seccionActual = pathname.match(/^\/proyectos\/[^/]+\/(prospectos|borradores|respuestas)/)?.[1];
+  const [vistas, setVistas] = useState<{ datos: SidebarProject[]; claves: string[] }>({ datos: projects, claves: [] });
+  const clave = seccionActual && actual ? `${actual.slug}:${seccionActual}` : null;
+  if (vistas.datos !== projects) setVistas({ datos: projects, claves: clave ? [clave] : [] });
+  else if (clave && !vistas.claves.includes(clave)) setVistas({ datos: projects, claves: [...vistas.claves, clave] });
+  const conteo = (sec: string, n: number) => (actual && vistas.claves.includes(`${actual.slug}:${sec}`) ? undefined : n);
+
   const contenido = (
     <div className="flex h-full flex-col gap-6 px-3 py-5">
       <Link href="/" onClick={cerrar} className="px-3 font-serif text-2xl tracking-tight text-ink">
@@ -147,9 +156,9 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
         <nav className="space-y-0.5" aria-label={`Secciones de ${actual.nombre}`}>
           <Item href={base} icon={ICON.resumen} label="Resumen" active={is(base)} onNavigate={cerrar} />
           <Item href={`${base}#buscar`} icon={ICON.buscar} label="Buscar prospectos" active={false} count={actual.buscando || undefined} tone="accent" onNavigate={cerrar} />
-          <Item href={`${base}/prospectos`} icon={ICON.prospectos} label="Prospectos" active={starts(`${base}/prospectos`)} count={actual.pendientes} onNavigate={cerrar} />
-          <Item href={`${base}/borradores`} icon={ICON.borradores} label="Borradores" active={starts(`${base}/borradores`)} count={actual.borradores} tone="accent" onNavigate={cerrar} />
-          <Item href={`${base}/respuestas`} icon={ICON.respuestas} label="Respuestas" active={starts(`${base}/respuestas`)} count={actual.respuestas} tone="accent" onNavigate={cerrar} />
+          <Item href={`${base}/prospectos`} icon={ICON.prospectos} label="Prospectos" active={starts(`${base}/prospectos`)} count={conteo("prospectos", actual.pendientes)} onNavigate={cerrar} />
+          <Item href={`${base}/borradores`} icon={ICON.borradores} label="Borradores" active={starts(`${base}/borradores`)} count={conteo("borradores", actual.borradores)} tone="accent" onNavigate={cerrar} />
+          <Item href={`${base}/respuestas`} icon={ICON.respuestas} label="Respuestas" active={starts(`${base}/respuestas`)} count={conteo("respuestas", actual.respuestas)} tone="accent" onNavigate={cerrar} />
           <Item href={`${base}/editar`} icon={ICON.config} label="Configuración" active={starts(`${base}/editar`)} onNavigate={cerrar} />
         </nav>
       )}

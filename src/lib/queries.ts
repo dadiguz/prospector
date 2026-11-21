@@ -68,7 +68,7 @@ export async function projectDetail(projectId: number) {
 export type ProspectRow = {
   id: number; nombre: string; ciudad: string | null; estado_mx: string | null; lista: string; estado: string;
   score: number | null; score_detalle_json: string; ficha_json: string; motivo_descarte: string | null;
-  no_contactar_antes_de: string | null; correo: string | null; whatsapp: string | null; tiene_borrador: number; etiqueta: string | null;
+  no_contactar_antes_de: string | null; creado_en: string; correo: string | null; whatsapp: string | null; tiene_borrador: number; etiqueta: string | null;
 };
 
 export type Canal = "correo" | "whatsapp";
@@ -82,7 +82,7 @@ export async function listProspects(projectId: number, lista: string, soloPendie
   const pend = soloPendientes ? "AND p.estado IN ('investigado','en_espera','borrador')" : "";
   const rows = all<ProspectRow & { instagram: string | null }>(
     `SELECT p.id, o.nombre, o.ciudad, o.estado AS estado_mx, p.lista, p.estado, p.score, p.score_detalle_json, p.ficha_json,
-       p.motivo_descarte, p.no_contactar_antes_de,
+       p.motivo_descarte, p.no_contactar_antes_de, p.creado_en,
        (SELECT valor FROM contacts c WHERE c.organization_id = o.id AND c.canal = 'correo' AND c.estado = 'valido' ORDER BY c.id LIMIT 1) correo,
        (SELECT valor FROM contacts c WHERE c.organization_id = o.id AND c.canal = 'whatsapp' ORDER BY c.id LIMIT 1) whatsapp,
        (SELECT valor FROM contacts c WHERE c.organization_id = o.id AND c.canal = 'instagram' ORDER BY c.id LIMIT 1) instagram,
@@ -136,13 +136,13 @@ export async function listDrafts(projectId: number, tag: number | null = null) {
 export type ReplyRow = {
   id: number; nombre: string; clasificacion: string; fecha: string | null; resumen: string; quien_respondio: string | null;
   pide: string | null; sugerencia: string | null; tanda: string | null; para: string | null; prospect_id: number; message_id: number;
-  revisado_por_humano: number; confianza: number | null;
+  revisado_por_humano: number; confianza: number | null; creado_en: string | null;
 };
 export async function listReplies(projectId: number, tag: number | null = null) {
   await io();
   const replies = all<ReplyRow>(
     `SELECT r.id, o.nombre, r.clasificacion, r.fecha, r.resumen, r.quien_respondio, r.pide, r.sugerencia, m.tanda, m.para, p.id prospect_id, m.id message_id,
-            r.revisado_por_humano, r.confianza
+            r.revisado_por_humano, r.confianza, r.creado_en
      FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
      WHERE p.project_id = ? AND ${tagFilterSql("p.id")} ORDER BY r.fecha DESC, r.id DESC`, projectId, tag, tag);
   const sinRespuesta = all<{ message_id: number; nombre: string; tanda: string | null; para: string | null; dias: number }>(
@@ -164,12 +164,15 @@ export type SidebarProject = { slug: string; nombre: string; pendientes: number;
 /** Proyectos con lo que necesita atención, para el menú lateral. */
 export async function sidebarProjects(): Promise<SidebarProject[]> {
   await io();
+  // Contadores = lo nuevo desde la última visita a cada sección (tabla vistas).
+  const visto = (sec: string) => `COALESCE((SELECT v.visto_en FROM vistas v WHERE v.project_id = p.id AND v.seccion = '${sec}'), p.creado_en)`;
   return all<SidebarProject>(`
     SELECT p.slug, p.nombre,
-      (SELECT COUNT(*) FROM prospects x WHERE x.project_id = p.id AND x.estado = 'investigado' AND x.lista <> 'descartado') pendientes,
-      (SELECT COUNT(*) FROM messages m JOIN prospects x ON x.id = m.prospect_id WHERE x.project_id = p.id AND m.estado IN ('borrador','aprobado')) borradores,
+      (SELECT COUNT(*) FROM prospects x WHERE x.project_id = p.id AND x.lista <> 'descartado' AND x.creado_en > ${visto("prospectos")}) pendientes,
+      (SELECT COUNT(*) FROM messages m JOIN prospects x ON x.id = m.prospect_id
+         WHERE x.project_id = p.id AND m.estado IN ('borrador','aprobado') AND m.creado_en > ${visto("borradores")}) borradores,
       (SELECT COUNT(*) FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects x ON x.id = m.prospect_id
-         WHERE x.project_id = p.id AND r.revisado_por_humano = 0) respuestas,
+         WHERE x.project_id = p.id AND r.creado_en > ${visto("respuestas")}) respuestas,
       (SELECT COUNT(*) FROM jobs j WHERE j.project_id = p.id AND j.estado IN ('pendiente','en_curso','en_pausa')) buscando
     FROM projects p WHERE p.estado <> 'archivado' ORDER BY p.id`);
 }

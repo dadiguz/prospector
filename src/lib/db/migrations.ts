@@ -366,4 +366,20 @@ CREATE UNIQUE INDEX labels_run ON labels(search_run_id) WHERE search_run_id IS N
 CREATE UNIQUE INDEX label_links_prospect ON label_links(label_id, prospect_id) WHERE prospect_id IS NOT NULL;
 `,
   },
+  {
+    id: 6,
+    name: "vistas",
+    sql: /* sql */ `
+CREATE TABLE vistas (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  seccion TEXT NOT NULL,
+  visto_en TEXT NOT NULL,
+  PRIMARY KEY (project_id, seccion)
+);
+INSERT INTO vistas (project_id, seccion, visto_en)
+  SELECT p.id, s.seccion, datetime('now') FROM projects p, (SELECT 'prospectos' seccion UNION ALL SELECT 'borradores' UNION ALL SELECT 'respuestas') s;
+ALTER TABLE reply_events ADD COLUMN creado_en TEXT;
+UPDATE reply_events SET creado_en = COALESCE(fecha || ' 12:00:00', datetime('now'));
+`,
+  },
 ];

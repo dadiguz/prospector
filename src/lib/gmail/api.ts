@@ -1,5 +1,5 @@
 import { accessToken, readGmail, GmailNotConnected } from "./oauth";
-import { buildMime } from "./mime";
+import { buildMime, htmlToText } from "./mime";
 import { domainOf, isFreeMail } from "../text";
 
 /** Cliente mínimo de la API REST de Gmail (sin dependencias). */
@@ -214,6 +214,16 @@ export function plainText(p: ThreadMessage["payload"]): string {
     const t = plainText(part);
     if (t) return t;
   }
-  if (p.mimeType === "text/html" && p.body?.data) return Buffer.from(p.body.data, "base64url").toString("utf8").replace(/<[^>]+>/g, " ");
+  if (p.mimeType === "text/html" && p.body?.data) {
+    // Correos solo en HTML: se corta donde Gmail pone la cita y se conservan los saltos de línea.
+    const html = Buffer.from(p.body.data, "base64url").toString("utf8").split(/<(?:div|blockquote)[^>]*class="[^"]*gmail_quote/i)[0];
+    return htmlToText(html.replace(/<div[^>]*class="[^"]*gmail_signature[\s\S]*$/i, ""));
+  }
   return "";
+}
+
+/** ¿El mensaje traía texto citado o firma que se ocultó al mostrarlo? (solo para mostrar una nota) */
+export function hadQuote(p: ThreadMessage["payload"]): boolean {
+  if (p.mimeType === "text/html" && p.body?.data) return /gmail_quote/i.test(Buffer.from(p.body.data, "base64url").toString("utf8"));
+  return (p.parts ?? []).some(hadQuote);
 }

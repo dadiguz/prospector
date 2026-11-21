@@ -5,6 +5,8 @@ import { readProfile, readSettings } from "@/lib/profile";
 import { json } from "@/lib/db";
 import { PageTitle, Empty, TagFilter } from "@/components/ui";
 import { projectTags, tagsByProspect } from "@/lib/tags";
+import { lastSeen, esNuevo } from "@/lib/vistas";
+import { SeenTracker } from "@/components/seen-tracker";
 import { DraftsBoard } from "./board";
 import { gmailStatus } from "@/lib/gmail/oauth";
 
@@ -17,6 +19,7 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
   const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
   const { drafts, enviadosHoy } = await listDrafts(project.id, tagId);
   const tagMap = tagsByProspect(drafts.map((d) => d.prospect_id));
+  const desde = lastSeen(project.id, "borradores");
   const profile = readProfile();
   const settings = readSettings();
   const gmail = await gmailStatus();
@@ -24,6 +27,7 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
 
   return (
     <>
+      <SeenTracker projectId={project.id} seccion="borradores" />
       <PageTitle sub="Revisa, edita y manda. Nada sale sin que tú lo decidas.">Borradores</PageTitle>
       <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} />
       {drafts.length === 0 ? (
@@ -44,6 +48,7 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
               pegas: typeof f.pegas === "string" ? f.pegas : null,
               cuando: typeof f.cuando_mandar === "string" ? f.cuando_mandar : null,
               tags: tagMap.get(d.prospect_id) ?? [],
+              nuevo: esNuevo(d.creado_en, desde),
             };
           })}
           remitente={gmail.conectado ? gmail.email ?? "" : profile?.correo ?? ""}

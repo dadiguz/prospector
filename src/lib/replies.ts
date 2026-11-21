@@ -35,8 +35,8 @@ export function recordReplyEvent(r: {
   if (!m) throw new Error("Mensaje no encontrado.");
   tx(() => {
     run(
-      `INSERT INTO reply_events (message_id, fecha, clasificacion, confianza, resumen, quien_respondio, en_copia, pide, revisado_por_humano, gmail_message_id)
-       VALUES (?, COALESCE(?, date('now','localtime')), ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reply_events (message_id, fecha, clasificacion, confianza, resumen, quien_respondio, en_copia, pide, revisado_por_humano, gmail_message_id, creado_en)
+       VALUES (?, COALESCE(?, date('now','localtime')), ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       r.messageId, r.fecha ?? null, r.clasificacion, r.confianza ?? 1, r.resumen, r.quien ?? null, r.enCopia ?? null, r.pide ?? null,
       r.revisado === false ? 0 : 1, r.gmailMessageId ?? null,
     );

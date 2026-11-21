@@ -252,9 +252,9 @@ export function importHistory(projectId: number, dir: string, opts: { reset?: bo
         continue;
       }
       run(
-        `INSERT INTO reply_events (message_id, fecha, clasificacion, confianza, resumen, quien_respondio, en_copia, pide, revisado_por_humano)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?, 1)`,
-        msgId, r.fecha, r.clasificacion, r.resumen, r.quien ?? null, r.en_copia ?? null, r.pide ?? null,
+        `INSERT INTO reply_events (message_id, fecha, clasificacion, confianza, resumen, quien_respondio, en_copia, pide, revisado_por_humano, creado_en)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?, 1, ? || ' 12:00:00')`,
+        msgId, r.fecha, r.clasificacion, r.resumen, r.quien ?? null, r.en_copia ?? null, r.pide ?? null, r.fecha,
       );
       const m = get<{ prospect_id: number; contact_id: number | null; para: string | null }>("SELECT prospect_id, contact_id, para FROM messages WHERE id = ?", msgId)!;
       const estado = ESTADO[r.clasificacion];

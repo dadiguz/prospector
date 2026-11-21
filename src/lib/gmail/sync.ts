@@ -19,14 +19,18 @@ const Clasif = z.object({
   pide: z.enum(["info", "llamada", "reunion", "nada"]),
 });
 
-function stripQuoted(text: string): string {
+export function stripQuoted(text: string): string {
   const lines = text.split(/\r?\n/);
   const out: string[] = [];
-  for (const l of lines) {
-    if (/^\s*>/.test(l)) continue;
-    if (/^(El|On) .{5,200}(escribió|wrote):?\s*$/i.test(l.trim())) break;
-    if (/^-{2,}\s*(Original Message|Mensaje original)/i.test(l.trim())) break;
-    out.push(l);
+  const encabezado = /^(El|On) .{5,300}(escribió|wrote):?\s*$/i;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (/^>/.test(l)) continue;
+    // Gmail a veces parte "El mar, 18 nov 2026 a las 17:27, Nombre <correo>\nescribió:" en dos o tres líneas.
+    const junto = [l, lines[i + 1]?.trim() ?? "", lines[i + 2]?.trim() ?? ""];
+    if (encabezado.test(l) || encabezado.test(`${junto[0]} ${junto[1]}`) || encabezado.test(junto.join(" "))) break;
+    if (/^-{2,}\s*(Original Message|Mensaje original|Forwarded message|Mensaje reenviado)/i.test(l)) break;
+    out.push(lines[i]);
   }
   return out.join("\n").trim();
 }
