@@ -89,6 +89,15 @@ case "${1:-estado}" in
     echo "Listo: http://127.0.0.1:$PORT  (arranca solo al iniciar sesión; registros en $LOGDIR/servidor.log)"
     ;;
   actualizar)
+    # No reiniciar a media búsqueda: se retoman solas, pero repiten el paso en curso (y su costo).
+    DB="${PROSPECTOR_HOME:-$HOME/.prospector}/prospector.db"
+    if [[ "${2:-}" != "--forzar" ]] && command -v sqlite3 >/dev/null && [[ -f "$DB" ]]; then
+      ACTIVAS="$(sqlite3 "$DB" "select count(*) from jobs where estado in ('en_curso','pendiente','en_pausa')" 2>/dev/null || echo 0)"
+      if [[ "$ACTIVAS" != "0" ]]; then
+        echo "Hay $ACTIVAS búsqueda(s) corriendo. Espera a que terminen o usa: npm run servicio -- actualizar --forzar" >&2
+        exit 2
+      fi
+    fi
     compilar
     detener
     escribir_plist
