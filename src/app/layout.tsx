@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Suspense } from "react";
 import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
 import { RunningPanel } from "@/components/running-panel";
+import { Sidebar } from "@/components/sidebar";
+import { sidebarProjects } from "@/lib/queries";
 
 const ui = Inter({ variable: "--font-ui", subsets: ["latin"] });
 const title = Newsreader({ variable: "--font-title", subsets: ["latin"], weight: ["400", "500"] });
@@ -12,22 +14,20 @@ export const metadata: Metadata = {
   description: "Prospección con evidencia, revisión humana y aprendizaje.",
 };
 
+async function SidebarData() {
+  return <Sidebar projects={await sidebarProjects()} />;
+}
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className={`${ui.variable} ${title.variable} antialiased`}>
       <body className="min-h-screen">
-        <header className="border-b border-line">
-          <div className="app-header mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
-            <Link href="/" className="font-serif text-2xl tracking-tight text-ink">
-              Prospector
-            </Link>
-            <nav className="flex gap-1 text-sm">
-              <Link href="/" className="btn btn-quiet">Inicio</Link>
-              <Link href="/ajustes" className="btn btn-quiet">Ajustes</Link>
-            </nav>
-          </div>
-        </header>
-        <main className="app-main mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6">{children}</main>
+        <Suspense fallback={<aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-line bg-[#f5f3ec] lg:block" />}>
+          <SidebarData />
+        </Suspense>
+        <div className="lg:pl-60">
+          <main className="app-main mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6 lg:pt-10">{children}</main>
+        </div>
         <RunningPanel />
       </body>
     </html>

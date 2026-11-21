@@ -52,11 +52,14 @@ export function tx<T>(fn: () => T): T {
   }
 }
 
+// node:sqlite devuelve filas sin prototipo; React no las deja pasar a componentes de cliente.
+// Se copian a objetos normales aquí para que ninguna pantalla tenga que acordarse.
 export function all<T>(sql: string, ...params: SqlParam[]): T[] {
-  return db().prepare(sql).all(...params) as T[];
+  return db().prepare(sql).all(...params).map((r) => ({ ...r })) as T[];
 }
 export function get<T>(sql: string, ...params: SqlParam[]): T | undefined {
-  return db().prepare(sql).get(...params) as T | undefined;
+  const r = db().prepare(sql).get(...params);
+  return (r ? { ...r } : undefined) as T | undefined;
 }
 export function run(sql: string, ...params: SqlParam[]) {
   return db().prepare(sql).run(...params);

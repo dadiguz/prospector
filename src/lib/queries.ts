@@ -158,3 +158,18 @@ export async function listReplies(projectId: number, tag: number | null = null) 
 }
 
 export const scoreLines = (s: string) => json<ScoreLine[]>(s, []);
+
+export type SidebarProject = { slug: string; nombre: string; pendientes: number; borradores: number; respuestas: number; buscando: number };
+
+/** Proyectos con lo que necesita atención, para el menú lateral. */
+export async function sidebarProjects(): Promise<SidebarProject[]> {
+  await io();
+  return all<SidebarProject>(`
+    SELECT p.slug, p.nombre,
+      (SELECT COUNT(*) FROM prospects x WHERE x.project_id = p.id AND x.estado = 'investigado' AND x.lista <> 'descartado') pendientes,
+      (SELECT COUNT(*) FROM messages m JOIN prospects x ON x.id = m.prospect_id WHERE x.project_id = p.id AND m.estado IN ('borrador','aprobado')) borradores,
+      (SELECT COUNT(*) FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects x ON x.id = m.prospect_id
+         WHERE x.project_id = p.id AND r.revisado_por_humano = 0) respuestas,
+      (SELECT COUNT(*) FROM jobs j WHERE j.project_id = p.id AND j.estado IN ('pendiente','en_curso','en_pausa')) buscando
+    FROM projects p WHERE p.estado <> 'archivado' ORDER BY p.id`);
+}

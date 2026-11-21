@@ -20,7 +20,7 @@ async function HomeContent() {
         <Link href="/proyectos/nuevo" className="btn btn-primary">Nuevo proyecto</Link>
       </div>
       {projects.length === 0 ? (
-        <div className="space-y-4">
+        <div id="importar" className="space-y-4">
           <Empty>
             Todavía no hay proyectos.{" "}
             <Link href="/proyectos/nuevo" className="text-accent underline underline-offset-4">Crea uno con el formulario</Link>
@@ -54,7 +54,7 @@ async function HomeContent() {
         </div>
       )}
       {projects.length > 0 && (
-        <div className="mt-12">
+        <div id="importar" className="mt-12 scroll-mt-6">
           <Section title="Importar o actualizar un proyecto">
             <ImportProjectForm />
             <p className="mt-2 text-xs text-ink-3">Si el proyecto ya existe, se actualiza su configuración y se conservan prospectos, mensajes y respuestas.</p>

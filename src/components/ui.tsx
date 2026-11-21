@@ -10,9 +10,9 @@ export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactN
   );
 }
 
-export function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
+export function Section({ title, children, aside, id }: { title: string; children: ReactNode; aside?: ReactNode; id?: string }) {
   return (
-    <section className="mb-10">
+    <section id={id} className="mb-10 scroll-mt-6">
       <div className="mb-3 flex items-baseline justify-between gap-4">
         <h2 className="text-sm font-medium uppercase tracking-wider text-ink-2">{title}</h2>
         {aside}

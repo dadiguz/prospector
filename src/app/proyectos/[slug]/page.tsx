@@ -48,7 +48,7 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
         </p>
       </Section>
 
-      <Section title="Buscar prospectos">
+      <Section title="Buscar prospectos" id="buscar">
         {d.jobs.length > 0 && (
           <ul className="mb-5 space-y-2">
             {d.jobs.map((j) => {

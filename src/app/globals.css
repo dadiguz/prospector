@@ -149,9 +149,9 @@ summary::-webkit-details-marker {
 
 /* Panel de búsquedas: en pantallas anchas se acomoda a la derecha y el contenido se recorre. */
 @media (min-width: 1280px) {
-  html[data-panel="1"] .app-main,
-  html[data-panel="1"] .app-header {
-    margin-left: max(1.5rem, calc((100vw - 21.5rem - 64rem) / 2));
+  /* 15rem del menú lateral + 21.5rem del panel; el contenido (64rem) se centra en lo que queda. */
+  html[data-panel="1"] .app-main {
+    margin-left: max(1.5rem, calc((100vw - 15rem - 21.5rem - 64rem) / 2));
     margin-right: 21.5rem;
   }
 }
