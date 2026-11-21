@@ -293,9 +293,10 @@ export async function repeatSearch(jobId: number): Promise<FormState> {
   return { ok: true, message: "Búsqueda nueva en curso." };
 }
 
-export async function cancelJob(jobId: number) {
+export async function cancelJob(jobId: number): Promise<FormState> {
   cancelJobImpl(jobId);
   refresh();
+  return { ok: true, message: "Búsqueda cancelada. Lo encontrado se queda." };
 }
 
 /* ---------- Gmail ---------- */

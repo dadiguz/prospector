@@ -40,11 +40,13 @@ export async function projectDetail(projectId: number) {
       "SELECT id, afirmacion, tipo, evidencia, verificado_en FROM product_facts WHERE project_id = ? ORDER BY tipo, id", projectId),
     hooks: all<{ id: number; nombre: string; formula: string; multiplicador: number; redondeo: number; frase: string; supuestos_json: string; condicion: string }>(
       "SELECT * FROM hooks WHERE project_id = ?", projectId),
-    segments: all<{ id: number; nombre: string; definicion: string; consultas_json: string; prospectos: number; enviados: number; positivos: number }>(`
+    segments: all<{ id: number; nombre: string; definicion: string; consultas_json: string; prospectos: number; enviados: number; positivos: number; activos: number }>(`
       SELECT s.*,
         (SELECT COUNT(*) FROM prospects p WHERE p.segment_id = s.id) prospectos,
         (SELECT COUNT(*) FROM messages m JOIN prospects p ON p.id = m.prospect_id WHERE p.segment_id = s.id AND m.estado = 'enviado') enviados,
-        (SELECT COUNT(*) FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects p ON p.id = m.prospect_id WHERE p.segment_id = s.id AND r.clasificacion IN ('interesado','acuse')) positivos
+        (SELECT COUNT(*) FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects p ON p.id = m.prospect_id WHERE p.segment_id = s.id AND r.clasificacion IN ('interesado','acuse')) positivos,
+        (SELECT COUNT(*) FROM jobs j WHERE j.project_id = s.project_id AND j.estado IN ('pendiente','en_curso','en_pausa')
+           AND json_extract(j.presupuesto_json, '$.segmentId') = s.id) activos
       FROM segments s WHERE s.project_id = ? AND s.estado = 'activo' ORDER BY s.id`, projectId),
     disqualifiers: all<{ regla: string; tipo: string; origen: string }>("SELECT regla, tipo, origen FROM disqualifiers WHERE project_id = ? ORDER BY tipo, id", projectId),
     weights: currentWeights(projectId),

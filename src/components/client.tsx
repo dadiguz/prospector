@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { FormState } from "@/app/actions";
+import { toast } from "./toaster";
 
 /** Botón que llama una acción del servidor con argumentos y muestra el resultado. */
 export function ActionButton({
@@ -28,7 +29,13 @@ export function ActionButton({
         disabled={pending}
         onClick={() => {
           if (confirm && !window.confirm(confirm)) return;
-          start(async () => setMsg((await action()) ?? null));
+          start(async () => {
+            const r = (await action()) ?? null;
+            // Lo que sale bien va a un aviso; los errores además quedan junto al botón.
+            if (r?.message) toast(r.message);
+            if (r?.error) toast(r.error, "error");
+            setMsg(r?.error ? r : null);
+          });
         }}
       >
         {pending ? pendingLabel : children}

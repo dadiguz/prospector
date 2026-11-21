@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cancelJob } from "@/app/actions";
 import { TagChip } from "./ui";
+import { toast } from "./toaster";
 
 type Busqueda = {
   id: number; estado: string; mensaje: string | null; proyecto: string; slug: string;
@@ -133,7 +134,10 @@ export function RunningPanel() {
                       type="button"
                       className="text-ink-2 underline-offset-4 hover:text-bad hover:underline"
                       onClick={() => {
-                        if (window.confirm("¿Cancelar esta búsqueda? Lo encontrado se queda.")) start(async () => { await cancelJob(b.id); });
+                        if (window.confirm("¿Cancelar esta búsqueda? Lo encontrado se queda.")) start(async () => {
+                          const r = await cancelJob(b.id);
+                          if (r?.message) toast(r.message, "info");
+                        });
                       }}
                     >
                       Cancelar
