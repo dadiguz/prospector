@@ -60,8 +60,18 @@ escribir_plist() {
 EOF
 }
 
-detener() { launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true; }
-arrancar() { launchctl bootstrap "$DOMAIN" "$PLIST"; }
+detener() {
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  # bootout termina en segundo plano: esperar a que el servicio deje de existir antes de volver a cargarlo.
+  for _ in $(seq 1 30); do launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || return 0; sleep 0.5; done
+}
+arrancar() {
+  for i in 1 2 3; do
+    launchctl bootstrap "$DOMAIN" "$PLIST" 2>/dev/null && return 0
+    sleep 2
+  done
+  launchctl bootstrap "$DOMAIN" "$PLIST"
+}
 
 puerto_ocupado() { lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; }
 

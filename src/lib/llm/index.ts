@@ -148,12 +148,15 @@ export async function research(opts: {
   const blocked = (opts.blockedDomains ?? []).slice(0, 64);
   const tools: Anthropic.Beta.BetaToolUnion[] = [
     { type: "web_search_20260209", name: "web_search", max_uses: opts.maxSearches, ...(blocked.length ? { blocked_domains: blocked } : {}) },
-    { type: "web_fetch_20260209", name: "web_fetch", max_uses: opts.maxSearches * 2, ...(blocked.length ? { blocked_domains: blocked } : {}) },
+    // max_content_tokens: cada página se lee hasta ~8,000 tokens; las páginas enormes eran la mayor parte del costo.
+    { type: "web_fetch_20260209", name: "web_fetch", max_uses: opts.maxSearches * 2, max_content_tokens: 8000, ...(blocked.length ? { blocked_domains: blocked } : {}) },
   ];
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: opts.prompt }];
   const total: Consumo = { costoUsd: 0, tokensEntrada: 0, tokensSalida: 0, busquedasWeb: 0 };
   const supportsFallback = !model.includes("haiku");
   let final: Anthropic.Beta.BetaMessage | null = null;
+  const urls = new Set<string>();
+  let text = "";
 
   for (let i = 0; i < 5; i++) {
     const t0 = Date.now();
@@ -196,22 +199,21 @@ export async function research(opts: {
     total.tokensSalida += u.tokensSalida;
     total.busquedasWeb += u.busquedasWeb;
     final = res;
+    // El texto y las fuentes de cada turno se juntan: con pausas, la lista puede quedar en un turno anterior.
+    for (const block of res.content) {
+      if (block.type === "text") {
+        text += block.text;
+        for (const cit of block.citations ?? []) if ("url" in cit && cit.url) urls.add(cit.url);
+      } else if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+        for (const r of block.content) if (r.type === "web_search_result") urls.add(r.url);
+      }
+    }
     if (res.stop_reason !== "pause_turn") break;
     messages.push({ role: "assistant", content: res.content });
   }
   if (!final) throw new Error("Sin respuesta del modelo");
   if (final.stop_reason === "refusal") throw new Error("El modelo no quiso completar esta investigación.");
-
-  const urls = new Set<string>();
-  let text = "";
-  for (const block of final.content) {
-    if (block.type === "text") {
-      text += block.text;
-      for (const cit of block.citations ?? []) if ("url" in cit && cit.url) urls.add(cit.url);
-    } else if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
-      for (const r of block.content) if (r.type === "web_search_result") urls.add(r.url);
-    }
-  }
+  if (!text.trim()) throw new Error(`El modelo no devolvió texto (terminó por ${final.stop_reason}).`);
   return { text, urls: [...urls], consumo: total };
 }
 

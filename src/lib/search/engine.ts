@@ -233,10 +233,24 @@ async function runJob(jobId: number) {
       const step = get<{ id: number; tipo: string; clave: string; entrada_json: string; intentos: number }>(
         "SELECT * FROM job_steps WHERE job_id = ? AND estado = 'pendiente' ORDER BY orden, id LIMIT 1", jobId);
       if (!step) {
+        // Sin candidatos pendientes y sin llegar a la meta: otra ronda de descubrimiento con otras consultas,
+        // mientras haya presupuesto. Se detiene tras MAX_RONDAS o dos rondas seguidas sin candidatos nuevos.
+        const rondas = all<{ salida_json: string | null }>(
+          "SELECT salida_json FROM job_steps WHERE job_id = ? AND tipo = 'descubrir' ORDER BY orden, id", jobId);
+        const nuevos = rondas.map((r) => json<{ a_investigar?: number }>(r.salida_json, {}).a_investigar ?? 0);
+        const secas = nuevos.length >= 2 && nuevos.slice(-2).every((n) => n === 0);
+        if (listos < budget.cuantos && rondas.length < MAX_RONDAS && !secas) {
+          const orden = get<{ m: number }>("SELECT COALESCE(MAX(orden), 0) m FROM job_steps WHERE job_id = ?", jobId)!.m + 1;
+          run("INSERT OR IGNORE INTO job_steps (job_id, orden, tipo, clave, entrada_json) VALUES (?, ?, 'descubrir', ?, ?)",
+            jobId, orden, `descubrir:${rondas.length + 1}`, JSON.stringify({ ronda: rondas.length + 1 }));
+          logActivity(jobId, `Faltan ${budget.cuantos - listos}; nueva ronda de búsqueda (${rondas.length + 1} de ${MAX_RONDAS})`);
+          continue;
+        }
         const total = get<{ a: number; b: number; wa: number; d: number }>(
           `SELECT SUM(lista='A') a, SUM(lista='B') b, SUM(lista='solo_wa_ig') wa, SUM(lista='descartado') d FROM prospects WHERE search_run_id = ?`, job.search_run_id)!;
+        const porque = secas ? "dos rondas seguidas sin candidatos nuevos" : `${rondas.length} rondas de búsqueda`;
         return finish(jobId, "hecho",
-          `Terminó: ${total.a ?? 0} en A, ${total.b ?? 0} en B, ${total.wa ?? 0} solo WhatsApp/IG, ${total.d ?? 0} descartados. ${listos < budget.cuantos ? `Quedaron ${listos} ${listosTxt}; no hubo más sólidos sin relleno.` : ""} Gasto US$${gastado.toFixed(2)}.`);
+          `Terminó: ${total.a ?? 0} en A, ${total.b ?? 0} en B, ${total.wa ?? 0} solo WhatsApp/IG, ${total.d ?? 0} descartados. ${listos < budget.cuantos ? `Quedaron ${listos} ${listosTxt} tras ${porque}; no hubo más sólidos sin relleno.` : ""} Gasto US$${gastado.toFixed(2)}.`);
       }
 
       run("UPDATE job_steps SET estado = 'en_curso', intentos = intentos + 1, actualizado_en = datetime('now') WHERE id = ?", step.id);
@@ -245,7 +259,7 @@ async function runJob(jobId: number) {
       try {
         const out =
           step.tipo === "descubrir"
-            ? await stepDiscover(jobId, job.project_id, job.search_run_id, budget)
+            ? await stepDiscover(jobId, job.project_id, job.search_run_id, budget, json<{ ronda?: number }>(step.entrada_json, {}).ronda ?? 1)
             : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }), canal);
         run("UPDATE job_steps SET estado = 'hecho', salida_json = ?, error = NULL, actualizado_en = datetime('now') WHERE id = ?", JSON.stringify(out), step.id);
       } catch (e) {
@@ -270,15 +284,40 @@ async function runJob(jobId: number) {
   }
 }
 
-async function stepDiscover(jobId: number, projectId: number, runId: number, budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda }) {
+const MAX_RONDAS = 4;
+/** Cada ronda nueva cambia de ángulo para no volver a encontrar lo mismo. */
+const ANGULOS = [
+  "",
+  "Ronda 2: usa consultas distintas a las obvias y busca en otras ciudades y estados.",
+  "Ronda 3: busca en directorios, calendarios de eventos, asociaciones y federaciones del sector.",
+  "Ronda 4: usa frases distintas del dolor (cómo cobran o se registran hoy) y fuentes locales o de nicho.",
+];
+
+async function stepDiscover(
+  jobId: number,
+  projectId: number,
+  runId: number,
+  budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda },
+  ronda = 1,
+) {
   const ctx = projectContext(projectId, budget.segmentId);
   const settings = readSettings();
   const pedidos = budget.cuantos * 3;
-  // Lo ya encontrado en el proyecto (lo más reciente primero), para que proponga organizaciones nuevas.
-  const conocidos = all<{ nombre: string }>(
-    "SELECT o.nombre FROM prospects p JOIN organizations o ON o.id = p.organization_id WHERE p.project_id = ? ORDER BY p.id DESC LIMIT 150",
-    projectId,
-  ).map((r) => r.nombre.slice(0, 60));
+  // Lo ya encontrado en el proyecto, más lo que esta búsqueda ya propuso o descartó, para que proponga organizaciones nuevas.
+  const previos = json<string[]>(get<{ l: string }>("SELECT limites_json l FROM search_runs WHERE id = ?", runId)?.l, []).map((s) => s.split(":")[0]);
+  const enEsta = all<{ e: string }>("SELECT entrada_json e FROM job_steps WHERE job_id = ? AND tipo = 'investigar'", jobId).map((r) => json<{ nombre?: string }>(r.e, {}).nombre ?? "");
+  const conocidos = [
+    ...new Set([
+      ...enEsta,
+      ...previos,
+      ...all<{ nombre: string }>(
+        "SELECT o.nombre FROM prospects p JOIN organizations o ON o.id = p.organization_id WHERE p.project_id = ? ORDER BY p.id DESC LIMIT 150",
+        projectId,
+      ).map((r) => r.nombre),
+    ]),
+  ]
+    .filter(Boolean)
+    .map((n) => n.slice(0, 60));
   const res = await research({
     tier: "medio",
     jobId,
@@ -291,6 +330,7 @@ async function stepDiscover(jobId: number, projectId: number, runId: number, bud
 
 Encuentra hasta ${pedidos} organizaciones candidatas para este segmento, en México, fuera de los estados excluidos.
 ${CANAL_PROMPT[budget.canal ?? "correo"].descubrir}
+${ANGULOS[ronda - 1] ?? ANGULOS[ANGULOS.length - 1]}
 ${conocidos.length ? `Estas ya las tenemos; NO las propongas otra vez: ${conocidos.join("; ")}.` : ""}
 Prioriza las que cumplan los atributos de mayor peso del perfil y muestren el dolor que resolvemos.${ctx.investigacion ? `\nContexto del proyecto: ${ctx.investigacion}` : ""}
 Para cada una da: nombre, sitio web oficial, ciudad, estado y por qué encaja (una línea). No investigues a fondo todavía.`,
@@ -303,7 +343,12 @@ Para cada una da: nombre, sitio web oficial, ciudad, estado y por qué encaja (u
     system: "Convierte la lista de candidatos a JSON. No inventes candidatos ni datos que no estén en el texto.",
     prompt: res.text,
   });
-  logActivity(jobId, `${data.candidatos.length} candidatos encontrados; revisando duplicados y territorio`);
+  logActivity(
+    jobId,
+    data.candidatos.length
+      ? `${data.candidatos.length} candidatos encontrados; revisando duplicados y territorio`
+      : `Sin candidatos en esta ronda. Lo que respondió: “${res.text.replace(/\s+/g, " ").slice(0, 160)}…”`,
+  );
 
   const vistos = new Set<string>();
   const nuevos: typeof data.candidatos = [];
@@ -320,12 +365,15 @@ Para cada una da: nombre, sitio web oficial, ciudad, estado y por qué encaja (u
     nuevos.push(c);
   }
   const elegidos = nuevos.slice(0, budget.maxCandidatos);
-  elegidos.forEach((c, i) =>
-    run("INSERT OR IGNORE INTO job_steps (job_id, orden, tipo, clave, entrada_json) VALUES (?, ?, 'investigar', ?, ?)",
-      jobId, i + 1, `investigar:${norm(c.nombre)}`, JSON.stringify(c)),
-  );
-  run("UPDATE search_runs SET limites_json = ? WHERE id = ?", JSON.stringify(saltados.slice(0, 50)), runId);
-  return { encontrados: data.candidatos.length, a_investigar: elegidos.length, saltados: saltados.length };
+  const base = get<{ m: number }>("SELECT COALESCE(MAX(orden), 0) m FROM job_steps WHERE job_id = ?", jobId)!.m;
+  let agregados = 0;
+  elegidos.forEach((c, i) => {
+    const r = run("INSERT OR IGNORE INTO job_steps (job_id, orden, tipo, clave, entrada_json) VALUES (?, ?, 'investigar', ?, ?)",
+      jobId, base + i + 1, `investigar:${norm(c.nombre)}`, JSON.stringify(c));
+    agregados += Number(r.changes);
+  });
+  run("UPDATE search_runs SET limites_json = ? WHERE id = ?", JSON.stringify([...previos.map((p) => `${p}: ya visto`), ...saltados].slice(-100)), runId);
+  return { ronda, encontrados: data.candidatos.length, a_investigar: agregados, saltados: saltados.length };
 }
 
 function safeHost(url: string): string | null {
