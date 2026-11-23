@@ -9,7 +9,7 @@ export type TagItem = { id: number; nombre: string; color: string; total?: numbe
 const grupo = (t: TagItem) => (t.tipo === "usuario" ? "Tus etiquetas" : /^(Tanda|Bitácora)/.test(t.nombre) ? "Tandas importadas" : "Búsquedas");
 
 /** Etiquetas recientes a la vista; el resto en una ventana con buscador. */
-export function TagBar({ tags, active, clearHref, visibles = 6 }: { tags: TagItem[]; active: number | null; clearHref: string; visibles?: number }) {
+export function TagBar({ tags, active, clearHref, visibles = 0 }: { tags: TagItem[]; active: number | null; clearHref: string; visibles?: number }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [q, setQ] = useState("");
   const recientes = useMemo(() => {
@@ -25,20 +25,23 @@ export function TagBar({ tags, active, clearHref, visibles = 6 }: { tags: TagIte
   const grupos = ["Búsquedas", "Tus etiquetas", "Tandas importadas"].map((g) => [g, filtradas.filter((t) => grupo(t) === g)] as const).filter(([, xs]) => xs.length);
 
   if (!tags.length) return null;
+  const activa = tags.find((t) => t.id === active);
+  void recientes;
+  void resto;
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-xs text-ink-3">Etiquetas</span>
-      {recientes.map((t) => (
-        <Link key={t.id} href={active === t.id ? clearHref : t.href} className={active && active !== t.id ? "opacity-50 hover:opacity-100" : ""}>
-          <TagChip nombre={t.nombre} color={t.color} active={active === t.id} count={t.total} />
-        </Link>
-      ))}
-      {resto > 0 && (
-        <button type="button" className="rounded-full border border-line-strong px-2 py-0.5 text-xs text-ink-2 hover:bg-[#efede5]" onClick={() => dialog.current?.showModal()}>
-          +{resto} más
+    <div className="flex items-center gap-1.5">
+      {activa ? (
+        <>
+          <button type="button" onClick={() => dialog.current?.showModal()} title="Cambiar etiqueta">
+            <TagChip nombre={activa.nombre} color={activa.color} active count={activa.total} />
+          </button>
+          <Link href={clearHref} className="text-xs text-ink-3 hover:text-ink" aria-label="Quitar filtro">✕</Link>
+        </>
+      ) : (
+        <button type="button" className="inline-flex items-center gap-1 rounded-full border border-line-strong px-2.5 py-0.5 text-xs text-ink-2 hover:bg-[#efede5]" onClick={() => dialog.current?.showModal()}>
+          Etiqueta ▾
         </button>
       )}
-      {active && <Link href={clearHref} className="ml-1 text-xs text-ink-2 underline underline-offset-4">Quitar filtro</Link>}
 
       <dialog
         ref={dialog}

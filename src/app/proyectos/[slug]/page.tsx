@@ -5,7 +5,8 @@ import { getProject, projectDetail } from "@/lib/queries";
 import { json } from "@/lib/db";
 import { hookFigure, mxn } from "@/lib/hook-formula";
 import { readSettings } from "@/lib/profile";
-import { PageTitle, Section, Fold, Badge, TagChip } from "@/components/ui";
+import { PageTitle, Section, Fold, Badge } from "@/components/ui";
+import { Info, More } from "@/components/info";
 import { AutoRefresh, ActionButton } from "@/components/client";
 import { cancelJob, repeatSearch } from "@/app/actions";
 import { SegmentCard, NewSegment } from "./segment-card";
@@ -32,69 +33,20 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
   const no = d.facts.filter((f) => f.tipo === "no_afirmar" || f.tipo === "no_mencionar");
   const pend = d.facts.filter((f) => f.tipo === "pendiente");
 
+  const recientes = d.jobs.slice(0, 3);
+
   return (
     <>
       {activeJob && <AutoRefresh seconds={5} />}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageTitle sub={project.idea}>{project.nombre}</PageTitle>
+        <PageTitle sub={<More lines={2}>{project.idea}</More>}>{project.nombre}</PageTitle>
         <div className="flex gap-2">
           <Link href={`/proyectos/${project.slug}/editar`} className="btn">Editar</Link>
-          <a href={`/api/proyectos/${project.slug}/exportar`} className="btn btn-quiet" title="Configuración del proyecto, sin prospectos ni datos personales">Exportar .md</a>
+          <a href={`/api/proyectos/${project.slug}/exportar`} className="btn btn-quiet" title="Descarga la configuración del proyecto (sin prospectos ni datos personales)">Exportar</a>
         </div>
       </div>
 
-      <Section title="Propuesta de valor">
-        <p className="max-w-3xl text-[17px] leading-relaxed">{project.propuesta_valor}</p>
-        <p className="mt-3 text-sm text-ink-2">
-          Métrica principal: {project.metrica_principal} · Conversión: {project.conversion} · Meta: {project.meta_actual}
-        </p>
-      </Section>
-
       <Section title="Buscar prospectos" id="buscar">
-        {d.jobs.length > 0 && (
-          <ul className="mb-5 space-y-2">
-            {d.jobs.map((j) => {
-              const l = JOB_LABEL[j.estado] ?? JOB_LABEL.pendiente;
-              return (
-                <li key={j.id} className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge tone={l.tone}>{l.label}</Badge>
-                      <span className="truncate">{j.etiqueta}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-ink-2">
-                      {j.hechos}/{j.pasos} pasos · {j.a} en lista A · US${j.costo.toFixed(2)} estimado
-                      {j.mensaje ? ` · ${j.mensaje}` : ""}
-                      {j.estado === "en_pausa" && j.reanudar_despues ? ` Reanuda a las ${new Date(j.reanudar_despues).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}.` : ""}
-                    </p>
-                  </div>
-                  <Activity json={j.actividad_json} live={j.estado === "en_curso"} />
-                  {j.tag_id && j.encontrados > 0 && (
-                    <Link href={`/proyectos/${project.slug}/prospectos?tag=${j.tag_id}&todos=1`} className="flex items-center gap-2 text-sm">
-                      <TagChip nombre={j.tag_nombre ?? "Resultados"} color={j.tag_color ?? "pizarra"} count={j.encontrados} />
-                      <span className="text-accent underline-offset-4 hover:underline">Ver resultados</span>
-                    </Link>
-                  )}
-                  {["pendiente", "en_curso", "en_pausa"].includes(j.estado) && (
-                    <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
-                      Cancelar
-                    </ActionButton>
-                  )}
-                  {["hecho", "fallo", "cancelado"].includes(j.estado) && (
-                    <ActionButton
-                      action={repeatSearch.bind(null, j.id)}
-                      className="btn"
-                      pendingLabel="Iniciando…"
-                      confirm={activeJob ? undefined : "¿Buscar de nuevo con los mismos parámetros? Los prospectos que ya tienes no se repiten."}
-                    >
-                      Buscar de nuevo
-                    </ActionButton>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
         <div className="space-y-3">
           {d.segments.map((s) => (
             <SegmentCard
@@ -109,98 +61,145 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
         </div>
       </Section>
 
-      <Section title="Ficha de verdad del producto">
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-ok">Se puede afirmar</h3>
-            <ul className="space-y-1.5 text-sm">
-              {si.map((f) => (
-                <li key={f.id} title={f.evidencia}>· {f.afirmacion}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-bad">No afirmar</h3>
-            <ul className="space-y-1.5 text-sm">
-              {no.map((f) => (
-                <li key={f.id}>· {f.afirmacion}</li>
-              ))}
-            </ul>
-            {pend.length > 0 && (
-              <>
-                <h3 className="mb-2 mt-5 text-sm font-medium text-warn">Pendiente de confirmar</h3>
-                <ul className="space-y-1.5 text-sm">
-                  {pend.map((f) => (
-                    <li key={f.id}>· {f.afirmacion}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </div>
-      </Section>
+      {recientes.length > 0 && (
+        <Section title="Búsquedas recientes">
+          <ul className="card divide-y divide-line">
+            {recientes.map((j) => {
+              const l = JOB_LABEL[j.estado] ?? JOB_LABEL.pendiente;
+              const activa = ["pendiente", "en_curso", "en_pausa"].includes(j.estado);
+              const ultimo = ultimaActividad(j.actividad_json);
+              return (
+                <li key={j.id} className="px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <Badge tone={l.tone}>{l.label}</Badge>
+                    <span className="min-w-0 flex-1 truncate">{j.etiqueta.replace(/^Búsqueda\s*/, "")}</span>
+                    <Info label="Detalles de la búsqueda">
+                      <span className="block">{j.hechos}/{j.pasos} pasos · US${j.costo.toFixed(2)}</span>
+                      {j.mensaje && <span className="mt-1 block">{j.mensaje}</span>}
+                      {j.estado === "en_pausa" && j.reanudar_despues && (
+                        <span className="mt-1 block">Reanuda a las {new Date(j.reanudar_despues).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}.</span>
+                      )}
+                      {ultimo && !activa && <span className="mt-1 block text-ink-3">Último paso: {ultimo}</span>}
+                    </Info>
+                    {j.tag_id && j.encontrados > 0 && (
+                      <Link href={`/proyectos/${project.slug}/prospectos?tag=${j.tag_id}&todos=1`} className="text-accent underline-offset-4 hover:underline">
+                        {j.encontrados} encontrados
+                      </Link>
+                    )}
+                    {activa ? (
+                      <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet py-1 text-xs" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
+                        Cancelar
+                      </ActionButton>
+                    ) : (
+                      <ActionButton
+                        action={repeatSearch.bind(null, j.id)}
+                        className="btn btn-quiet py-1 text-xs"
+                        pendingLabel="Iniciando…"
+                        confirm={activeJob ? undefined : "¿Buscar de nuevo con lo mismo? No se repiten los que ya tienes."}
+                      >
+                        Repetir
+                      </ActionButton>
+                    )}
+                  </div>
+                  {j.estado === "en_curso" && ultimo && (
+                    <p className="mt-1.5 flex items-center gap-2 text-xs text-ink-2">
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" aria-hidden="true" />
+                      <span className="truncate">{ultimo}</span>
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      )}
 
-      <Section title="Gancho">
+      <Section title="Configuración del proyecto">
+        <Fold title="Propuesta de valor">
+          <p className="max-w-3xl leading-relaxed">{project.propuesta_valor}</p>
+          <p className="mt-2 text-sm text-ink-2">Meta: {project.meta_actual} · Cuenta como cliente: {project.conversion}</p>
+        </Fold>
+        <Fold title={<>Qué se puede decir del producto <span className="text-ink-3">· {si.length} sí, {no.length} no</span></>}>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-ok">Se puede afirmar</h3>
+              <ul className="space-y-1.5 text-sm">
+                {si.map((f) => (
+                  <li key={f.id} title={f.evidencia}>· {f.afirmacion}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-bad">No afirmar</h3>
+              <ul className="space-y-1.5 text-sm">
+                {no.map((f) => (
+                  <li key={f.id}>· {f.afirmacion}</li>
+                ))}
+              </ul>
+              {pend.length > 0 && (
+                <>
+                  <h3 className="mb-2 mt-5 text-sm font-medium text-warn">Por confirmar</h3>
+                  <ul className="space-y-1.5 text-sm">
+                    {pend.map((f) => (
+                      <li key={f.id}>· {f.afirmacion}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </div>
+        </Fold>
         {d.hooks.map((h) => (
-          <div key={h.id}>
-            <p className="text-sm">
-              {h.nombre}: <span className="text-ink-2">“{h.frase.replace("{cifra}", "$X")}”</span>
-            </p>
+          <Fold key={h.id} title={`Gancho: ${h.nombre}`}>
+            <p className="text-sm text-ink-2">“{h.frase.replace("{cifra}", "$X")}”</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {[500, 1200, 2500, 4000].map((p) => {
                 const c = hookFigure(h.formula, p, h.multiplicador, h.redondeo);
                 return (
-                  <span key={p} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
-                    Precio de {mxn(p)} → <strong className="font-medium">unos {c ? mxn(c) : "—"}</strong> por cada {h.multiplicador}
+                  <span key={p} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs">
+                    {mxn(p)} → <strong className="font-medium">{c ? mxn(c) : "—"}</strong>
                   </span>
                 );
               })}
             </div>
-            <Fold title="Fórmula y supuestos">
-              <p className="font-mono text-xs">{h.formula}</p>
-              <ul className="mt-2 space-y-1 text-sm text-ink-2">
-                {json<string[]>(h.supuestos_json, []).map((s) => (
-                  <li key={s}>· {s}</li>
-                ))}
-              </ul>
-              {h.condicion && <p className="mt-2 text-sm text-ink-2">Usar si: {h.condicion}</p>}
-            </Fold>
-          </div>
+            <p className="mt-3 font-mono text-xs text-ink-3">{h.formula}</p>
+            <ul className="mt-1 space-y-1 text-xs text-ink-2">
+              {json<string[]>(h.supuestos_json, []).map((s) => (
+                <li key={s}>· {s}</li>
+              ))}
+            </ul>
+          </Fold>
         ))}
-      </Section>
-
-      <Fold title="Descalificadores">
-        <ul className="space-y-1.5 text-sm">
-          {d.disqualifiers.map((q) => (
-            <li key={q.regla}>
-              <Badge tone={q.tipo === "duro" ? "bad" : "warn"}>{q.tipo}</Badge> {q.regla}
-              {q.origen && <span className="text-ink-3"> · {q.origen}</span>}
-            </li>
-          ))}
-        </ul>
-      </Fold>
-      <Fold title="Pesos del perfil (scoring)">
-        <table className="w-full text-sm">
-          <tbody>
-            {d.weights.map((w) => (
-              <tr key={w.clave} className="border-b border-line last:border-0">
-                <td className="py-1.5">{w.descripcion}</td>
-                <td className={`py-1.5 text-right font-mono ${w.peso < 0 ? "text-bad" : ""}`}>{w.peso > 0 ? `+${w.peso}` : w.peso}</td>
-              </tr>
+        <Fold title="Descartar automáticamente">
+          <ul className="space-y-1.5 text-sm">
+            {d.disqualifiers.map((q) => (
+              <li key={q.regla}>
+                <Badge tone={q.tipo === "duro" ? "bad" : "warn"}>{q.tipo === "duro" ? "siempre" : "revisar"}</Badge> {q.regla}
+              </li>
             ))}
-          </tbody>
-        </table>
-        <p className="mt-2 text-xs text-ink-3">Son hipótesis hasta que haya respuestas suficientes. Los cambios se proponen desde Respuestas y se aprueban a mano.</p>
-      </Fold>
-      {d.territory && (
-        <Fold title="Territorio">
-          <p className="text-sm">Todo México excepto: {json<string[]>(d.territory.excluidos_json, []).join(", ")}.</p>
-          <p className="mt-1 text-sm text-ink-2">{d.territory.motivo}</p>
-          {json<string[]>(d.territory.excepciones_json, []).length > 0 && (
-            <p className="mt-1 text-sm text-ink-2">Excepciones: {json<string[]>(d.territory.excepciones_json, []).join(", ")}</p>
-          )}
+          </ul>
         </Fold>
-      )}
+        <Fold title="Qué hace mejor a un prospecto">
+          <table className="w-full text-sm">
+            <tbody>
+              {d.weights.map((w) => (
+                <tr key={w.clave} className="border-b border-line last:border-0">
+                  <td className="py-1.5">{w.descripcion}</td>
+                  <td className={`py-1.5 text-right font-mono ${w.peso < 0 ? "text-bad" : ""}`}>{w.peso > 0 ? `+${w.peso}` : w.peso}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Fold>
+        {d.territory && (
+          <Fold title="Territorio">
+            <p className="text-sm">Todo México excepto: {json<string[]>(d.territory.excluidos_json, []).join(", ")}.</p>
+            {json<string[]>(d.territory.excepciones_json, []).length > 0 && (
+              <p className="mt-1 text-sm text-ink-2">Excepciones: {json<string[]>(d.territory.excepciones_json, []).join(", ")}</p>
+            )}
+          </Fold>
+        )}
+      </Section>
     </>
   );
 }
@@ -213,32 +212,8 @@ export default function ProjectPage(props: PageProps<"/proyectos/[slug]">) {
   );
 }
 
-/** Lo que la búsqueda está haciendo: la última acción destacada y las anteriores tenues. */
-function Activity({ json: raw, live }: { json: string; live: boolean }) {
+/** La última acción de una búsqueda, en una línea. */
+function ultimaActividad(raw: string): string | null {
   const items = json<{ t: string; texto: string }[]>(raw, []);
-  if (!items.length) return null;
-  const hora = (t: string) => new Date(t).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const esPaso = (t: string) => /^(Investigando a|Buscando candidatos)/.test(t);
-  const paso = [...items].reverse().find((a) => esPaso(a.texto));
-  const feed = items.filter((a) => !esPaso(a.texto)).reverse().slice(0, live ? 5 : 1);
-  return (
-    <div className="order-last w-full border-t border-line pt-2 text-xs">
-      {paso && (
-        <p className="flex items-center gap-2 font-medium text-ink">
-          {live && <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" aria-hidden="true" />}
-          <span className="truncate">{live ? paso.texto : `Último paso: ${paso.texto}`}</span>
-        </p>
-      )}
-      {feed.length > 0 && (
-        <ul className="mt-1 space-y-0.5">
-          {feed.map((a, i) => (
-            <li key={i} className={`flex gap-2 ${i === 0 ? "text-ink-2" : "text-ink-3"}`}>
-              <span className="truncate">{a.texto}</span>
-              <span className="ml-auto shrink-0">{hora(a.t)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  return items.length ? items[items.length - 1].texto : null;
 }

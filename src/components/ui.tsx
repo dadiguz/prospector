@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 
 export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="mb-8">
+    <div className="mb-6">
       <h1 className="font-serif text-4xl leading-tight tracking-tight">{children}</h1>
-      {sub && <p className="mt-2 max-w-2xl text-ink-2">{sub}</p>}
+      {sub && <div className="mt-2 max-w-2xl text-ink-2">{sub}</div>}
     </div>
   );
 }

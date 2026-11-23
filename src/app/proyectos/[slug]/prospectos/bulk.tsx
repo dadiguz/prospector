@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { createDraftsBulk, tagProspects, type FormState } from "@/app/actions";
+import { Info } from "@/components/info";
 
 /** Casilla de una fila. No abre la ficha al marcarla. */
 export function RowCheckbox({ id }: { id: number }) {
@@ -13,7 +14,7 @@ export function RowCheckbox({ id }: { id: number }) {
       value={id}
       form="bulk-prospectos"
       aria-label="Seleccionar"
-      className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]"
+      className="h-4 w-4 shrink-0 accent-[var(--accent)]"
       onClick={(e) => e.stopPropagation()}
       onChange={() => document.dispatchEvent(new Event("sel-change"))}
     />
@@ -32,10 +33,12 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
   const recount = () => setCount(checks().filter((c) => c.checked).length);
   const selected = () => checks().filter((c) => c.checked).map((c) => Number(c.value));
 
+  const [etiquetando, setEtiquetando] = useState(false);
+
   return (
     <form
       id="bulk-prospectos"
-      className="card sticky top-2 z-10 mb-4 flex flex-wrap items-center gap-2 px-4 py-3 text-sm"
+      className={`sticky top-2 z-10 mb-3 flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-xl px-3 py-1.5 text-sm ${count ? "card" : ""}`}
       onSubmit={(e) => e.preventDefault()}
       onChangeCapture={recount}
       ref={(el) => {
@@ -45,44 +48,52 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
         return () => document.removeEventListener("sel-change", h);
       }}
     >
-      <button
-        type="button"
-        className="btn btn-quiet"
-        onClick={() => {
-          const all = checks();
-          const marcar = all.some((c) => !c.checked);
-          all.forEach((c) => (c.checked = marcar));
-          recount();
-        }}
-      >
-        {count && count === total ? "Quitar selección" : `Seleccionar todos (${total})`}
-      </button>
-      <span className="text-ink-3">{count} seleccionado(s)</span>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1.5 text-xs text-ink-2" title="Si a un prospecto le falta un dato (cifra, observación), se quita esa frase en vez de dejar {variable}">
-          <input type="checkbox" checked={sinVariables} onChange={(e) => setSinVariables(e.target.checked)} className="accent-[var(--accent)]" />
-          Sin variables
-        </label>
-        <input className="input w-40 py-1.5" placeholder="Nueva etiqueta" value={tagName} onChange={(e) => setTagName(e.target.value)} />
-        <button
-          type="button"
-          className="btn"
-          disabled={!count || !tagName.trim() || pending}
-          onClick={() => start(async () => { setState(await tagProspects(projectId, selected(), tagName)); setTagName(""); })}
-        >
-          Etiquetar
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!count || pending}
-          onClick={() => start(async () => setState(await createDraftsBulk(selected(), sinVariables)))}
-        >
-          {pending ? "Trabajando…" : `Crear borradores (${count})`}
-        </button>
-      </div>
-      {state && (
-        <div className="w-full space-y-1 pt-1">
+      <label className="flex cursor-pointer items-center gap-2 pl-2 text-ink-2">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[var(--accent)]"
+          checked={count > 0 && count === total}
+          ref={(el) => {
+            if (el) el.indeterminate = count > 0 && count < total;
+          }}
+          onChange={() => {
+            const all = checks();
+            const marcar = all.some((c) => !c.checked);
+            all.forEach((c) => (c.checked = marcar));
+            recount();
+          }}
+        />
+        {count ? `${count} seleccionado(s)` : `Seleccionar todos (${total})`}
+      </label>
+      {count > 0 && (
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {etiquetando ? (
+            <>
+              <input className="input w-40 py-1.5" placeholder="Nombre de la etiqueta" value={tagName} onChange={(e) => setTagName(e.target.value)} autoFocus />
+              <button
+                type="button"
+                className="btn"
+                disabled={!tagName.trim() || pending}
+                onClick={() => start(async () => { setState(await tagProspects(projectId, selected(), tagName)); setTagName(""); setEtiquetando(false); })}
+              >
+                Poner
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-quiet" onClick={() => setEtiquetando(true)}>Etiquetar</button>
+          )}
+          <label className="flex items-center gap-1.5 text-xs text-ink-2">
+            <input type="checkbox" checked={sinVariables} onChange={(e) => setSinVariables(e.target.checked)} className="accent-[var(--accent)]" />
+            Sin variables
+            <Info label="Qué es Sin variables">Si a un prospecto le falta un dato (por ejemplo la cifra), se quita esa frase en lugar de dejar un hueco como {"{cifra}"}.</Info>
+          </label>
+          <button type="button" className="btn btn-primary" disabled={pending} onClick={() => start(async () => setState(await createDraftsBulk(selected(), sinVariables)))}>
+            {pending ? "Trabajando…" : `Crear ${count} borrador(es)`}
+          </button>
+        </div>
+      )}
+      {state && (state.message || state.error) && (
+        <div className="w-full space-y-1 pb-1 pl-2">
           {state.message && (
             <p className="text-ok">
               {state.message}{" "}

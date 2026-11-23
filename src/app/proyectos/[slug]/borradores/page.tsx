@@ -28,10 +28,12 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <SeenTracker projectId={project.id} seccion="borradores" />
-      <PageTitle sub="Revisa, edita y manda. Nada sale sin que tú lo decidas.">Borradores</PageTitle>
-      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} />
+      <div className="flex items-start justify-between gap-4">
+        <PageTitle sub="Revisa y manda. Nada sale sin tu aprobación.">Borradores</PageTitle>
+        <div className="pt-3"><TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} /></div>
+      </div>
       {drafts.length === 0 ? (
-        <Empty>{tagId ? "No hay borradores con esta etiqueta." : "No hay borradores. Créalos desde Prospectos: selecciona y pulsa “Crear borradores”."}</Empty>
+        <Empty>{tagId ? "No hay borradores con esta etiqueta." : "No hay borradores. Créalos desde Prospectos."}</Empty>
       ) : (
         <DraftsBoard
           projectId={project.id}

@@ -2,8 +2,9 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getProject, listReplies } from "@/lib/queries";
 import { responseAnalysis } from "@/lib/analysis";
-import { PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL, TagChip, TagFilter } from "@/components/ui";
-import { projectTags, tagsByProspect } from "@/lib/tags";
+import { PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL, TagFilter } from "@/components/ui";
+import { Info, More } from "@/components/info";
+import { projectTags } from "@/lib/tags";
 import { ReplyForm, SuggestButton, SyncButton, ReviewReply } from "./client";
 import { ReplyDetailButton } from "./detail";
 import { lastSeen, esNuevo } from "@/lib/vistas";
@@ -22,7 +23,6 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   const tags = projectTags(project.id);
   const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
   const { replies, sinRespuesta, retomar } = await listReplies(project.id, tagId);
-  const tagMap = tagsByProspect(replies.map((r) => r.prospect_id));
   const desde = lastSeen(project.id, "respuestas");
   const nuevas = replies.filter((r) => esNuevo(r.creado_en, desde)).length;
   const a = responseAnalysis(project.id);
@@ -32,16 +32,18 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <SeenTracker projectId={project.id} seccion="respuestas" />
-      <PageTitle sub="Clasificadas por tipo, con una sugerencia de respuesta en el tono del prospecto.">Respuestas</PageTitle>
-
-      {nuevas > 0 && <p className="-mt-4 mb-6 text-sm text-accent">{nuevas} respuesta(s) nueva(s) desde tu última visita, resaltadas abajo.</p>}
-      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} />
-      <div className="card mb-10 grid grid-cols-2 gap-6 p-6 sm:grid-cols-5">
+      <div className="flex items-start justify-between gap-4">
+        <PageTitle sub="Lo que contestaron, con una respuesta sugerida.">Respuestas</PageTitle>
+        <div className="pt-3"><TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} /></div>
+      </div>
+      {nuevas > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevas} nueva(s)</p>}
+      <div className="mb-8 flex flex-wrap items-center gap-8">
         <Stat label="Enviados" value={a.total.enviados} />
-        <Stat label="Entregados" value={a.total.entregados} />
         <Stat label="Positivos" value={a.total.positivos} tone="ok" />
-        <Stat label="Negativos" value={a.total.negativos} />
         <Stat label="Rebotes" value={a.total.rebotes} tone="bad" />
+        <Info label="Más cifras">
+          Entregados: {a.total.entregados} · Negativos: {a.total.negativos}. El detalle por tanda y por atributo está en Análisis, al final.
+        </Info>
       </div>
 
       <Section title="Respuestas" aside={gmail.conectado ? <SyncButton projectId={project.id} /> : undefined}>
@@ -61,7 +63,6 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
                         {esNuevo(r.creado_en, desde) && <span className="rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nueva</span>}
                         <Badge tone={l.tone}>{l.label}</Badge>
                         {r.pide && r.pide !== "nada" && <Badge tone="accent">Pide {r.pide === "info" ? "información" : r.pide}</Badge>}
-                        {(tagMap.get(r.prospect_id) ?? []).map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}
                       </div>
                       <p className="mt-1 text-sm">{r.resumen}</p>
                       <p className="mt-1 text-xs text-ink-3">
@@ -80,11 +81,11 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
                         <span className="text-xs text-ink-2">Sugerencia de respuesta</span>
                         <CopyButton text={r.sugerencia.replace(/\n?\[REVISAR\][\s\S]*$/, "").trim()} />
                       </div>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      <More lines={3} className="whitespace-pre-wrap text-sm leading-relaxed">
                         {r.sugerencia.split(/(\[REVISAR\][\s\S]*)/).map((part, i) =>
                           part.startsWith("[REVISAR]") ? <mark key={i} className="suposicion block mt-2">{part}</mark> : <span key={i}>{part}</span>,
                         )}
-                      </p>
+                      </More>
                     </div>
                   )}
                 </li>
@@ -94,10 +95,10 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
         )}
       </Section>
 
-      <Section title="Registrar una respuesta">
-        <p className="mb-3 text-sm text-ink-2">{gmail.conectado ? "Para respuestas que llegaron por otro canal (teléfono, WhatsApp)." : "Mientras Gmail no esté conectado, registra aquí lo que conteste cada prospecto."}</p>
+      <Fold title="Registrar una respuesta a mano" open={!gmail.conectado && replies.length === 0}>
+        <p className="mb-3 text-sm text-ink-2">{gmail.conectado ? "Para lo que contestaron por teléfono o WhatsApp." : "Sin Gmail conectado, anota aquí lo que conteste cada prospecto."}</p>
         <ReplyForm options={sinRespuesta.map((s) => ({ id: s.message_id, label: `${s.nombre}${s.para ? ` · ${s.para}` : ""}` }))} />
-      </Section>
+      </Fold>
 
       {retomar.length > 0 && (
         <Section title="Retomar">
@@ -120,7 +121,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
         </ul>
       </Fold>
 
-      <Fold title="Análisis de respuestas" open>
+      <Fold title="Análisis">
         {a.avisos.length > 0 && (
           <ul className="mb-5 space-y-1 text-sm text-warn">
             {a.avisos.map((x) => <li key={x}>! {x}</li>)}
@@ -170,8 +171,9 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-ink-3">
-          Los atributos de las tandas importadas se estimaron del texto de cada ficha. Un cambio de peso se propone solo con 20 entregados por valor y 3 positivos de diferencia.
+        <p className="mt-2 flex items-center gap-1 text-xs text-ink-3">
+          Cómo se calcula
+          <Info>Los atributos de las tandas importadas se estimaron del texto de cada ficha. Un cambio de peso se propone solo con 20 entregados por valor y 3 positivos de diferencia.</Info>
         </p>
         {a.propuestas.length > 0 ? (
           <ul className="mt-4 space-y-1 text-sm">

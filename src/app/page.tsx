@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { io } from "next/cache";
 import { listProjects } from "@/lib/queries";
 import { readProfile } from "@/lib/profile";
-import { PageTitle, Empty, Section } from "@/components/ui";
+import { PageTitle, Empty, Fold } from "@/components/ui";
 import { ImportProjectForm } from "./import-form";
 
 async function HomeContent() {
@@ -16,7 +16,7 @@ async function HomeContent() {
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageTitle sub="Cada proyecto con lo que se ha contactado y quién respondió.">Hola, {profile.nombre.split(" ")[0]}</PageTitle>
+        <PageTitle sub="Tus proyectos de prospección.">Hola, {profile.nombre.split(" ")[0]}</PageTitle>
         <Link href="/proyectos/nuevo" className="btn btn-primary">Nuevo proyecto</Link>
       </div>
       {projects.length === 0 ? (
@@ -55,10 +55,10 @@ async function HomeContent() {
       )}
       {projects.length > 0 && (
         <div id="importar" className="mt-12 scroll-mt-6">
-          <Section title="Importar o actualizar un proyecto">
+          <Fold title="Importar un proyecto (.md)">
             <ImportProjectForm />
-            <p className="mt-2 text-xs text-ink-3">Si el proyecto ya existe, se actualiza su configuración y se conservan prospectos, mensajes y respuestas.</p>
-          </Section>
+            <p className="mt-2 text-xs text-ink-3">Si ya existe, se actualiza su configuración y se conservan sus prospectos y mensajes.</p>
+          </Fold>
         </div>
       )}
     </>

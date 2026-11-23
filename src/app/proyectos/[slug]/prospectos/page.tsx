@@ -14,11 +14,12 @@ import { BulkBar, RowCheckbox } from "./bulk";
 import { projectTags, tagsByProspect } from "@/lib/tags";
 import { lastSeen, esNuevo } from "@/lib/vistas";
 import { SeenTracker } from "@/components/seen-tracker";
+import { Info } from "@/components/info";
 
 const LISTAS = [
-  { key: "A", label: "A · Correo verificado" },
-  { key: "B", label: "B · Más débiles" },
-  { key: "solo_wa_ig", label: "Solo WhatsApp o Instagram" },
+  { key: "A", label: "Lista A" },
+  { key: "B", label: "Lista B" },
+  { key: "solo_wa_ig", label: "Sin correo" },
   { key: "descartado", label: "Descartados" },
 ] as const;
 
@@ -82,10 +83,9 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <SeenTracker projectId={project.id} seccion="prospectos" />
-      <PageTitle sub="Ordenados por probabilidad de respuesta. Abre una fila para ver la evidencia.">Prospectos</PageTitle>
-      {nuevos > 0 && <p className="-mt-4 mb-6 text-sm text-accent">{nuevos} nuevo(s) desde tu última visita, resaltados abajo.</p>}
-      <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}&todos=1${canal ? `&canal=${canal}` : ""}` : qs({ tag: null }))} />
-      <div className="mb-6 flex flex-wrap items-center gap-2">
+      <PageTitle sub="Los más prometedores primero. Abre uno para ver los detalles.">Prospectos</PageTitle>
+      {nuevos > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevos} nuevo(s)</p>}
+      <div className="mb-5 flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-line pb-3">
         {LISTAS.map((l) => {
           const c = counts.find((x) => x.lista === l.key);
           const n = l.key === "descartado" || todos ? c?.total ?? 0 : c?.pendientes ?? 0;
@@ -93,39 +93,42 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
             <Link
               key={l.key}
               href={qs({ lista: l.key })}
-              className={`btn ${lista === l.key ? "border-ink" : "btn-quiet"}`}
+              className={`rounded-lg px-2.5 py-1 text-sm ${lista === l.key ? "bg-surface font-medium text-ink shadow-sm ring-1 ring-line" : "text-ink-2 hover:text-ink"}`}
             >
               {l.label} <span className="text-ink-3">{n}</span>
             </Link>
           );
         })}
-        {lista !== "descartado" && (
-          <Link href={qs({ todos: !todos })} className="ml-auto text-sm text-ink-2 underline-offset-4 hover:underline">
-            {todos ? "Solo por revisar" : "Ver también contactados"}
-          </Link>
-        )}
-      </div>
-
-      <div className="-mt-3 mb-6 flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-xs text-ink-3">Canal</span>
-        {([
-          ["correo", "Correo", <MailIcon key="m" size={14} />, canales.correo],
-          ["whatsapp", "WhatsApp", <WhatsAppIcon key="w" size={14} />, canales.whatsapp],
-        ] as const).map(([k, label, icon, n]) => (
-          <Link
-            key={k}
-            href={qs({ canal: canal === k ? null : k })}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${canal === k ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`}
-            title={canal === k ? "Quitar filtro de canal" : `Solo los que tienen ${label.toLowerCase()}`}
-          >
-            {icon} {label} <span className="text-ink-3">{n}</span>
-          </Link>
-        ))}
+        <Info label="Qué es cada lista" className="ml-1">
+          <b className="font-medium text-ink">Lista A:</b> correo verificado y buen perfil. <b className="font-medium text-ink">Lista B:</b> perfil más débil o correo dudoso.{" "}
+          <b className="font-medium text-ink">Sin correo:</b> solo WhatsApp o Instagram. El número cuenta los que faltan por revisar.
+        </Info>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {([
+            ["correo", "Con correo", <MailIcon key="m" size={14} />, canales.correo],
+            ["whatsapp", "Con WhatsApp", <WhatsAppIcon key="w" size={14} />, canales.whatsapp],
+          ] as const).map(([k, label, icon, n]) => (
+            <Link
+              key={k}
+              href={qs({ canal: canal === k ? null : k })}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${canal === k ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`}
+              title={canal === k ? "Quitar filtro" : label}
+            >
+              {icon} <span className="text-ink-3">{n}</span>
+            </Link>
+          ))}
+          <TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}&todos=1${canal ? `&canal=${canal}` : ""}` : qs({ tag: null }))} />
+          {lista !== "descartado" && (
+            <Link href={qs({ todos: !todos })} className="ml-1 text-xs text-ink-3 underline-offset-4 hover:text-ink hover:underline">
+              {todos ? "Solo por revisar" : "Ver todos"}
+            </Link>
+          )}
+        </div>
       </div>
 
       {rows.length === 0 ? (
         <Empty>
-          {todos || lista === "descartado" ? "No hay prospectos en esta lista." : "Nada por revisar aquí. Lanza una búsqueda desde la página del proyecto."}
+          {todos || lista === "descartado" ? "No hay prospectos en esta lista." : "Nada por revisar aquí. Busca prospectos desde Resumen."}
         </Empty>
       ) : (
         <>
@@ -151,76 +154,99 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
             return (
               <li key={r.id} className={esNuevo(r.creado_en, desde) ? "border-l-2 border-accent bg-accent-soft/30" : ""}>
                 <details className="group">
-                  <summary className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-4 hover:bg-[#fcfbf8] sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto_auto]">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <RowCheckbox id={r.id} />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate font-medium">{r.nombre}</span>
-                          {esNuevo(r.creado_en, desde) && <span className="shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nuevo</span>}
-                        </div>
-                        <div className="truncate text-xs text-ink-2">{[str(f.lugar) || r.ciudad, r.estado_mx].filter(Boolean).join(" · ") || "Sin ubicación"}</div>
-                        {(tagMap.get(r.id) ?? []).length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(tagMap.get(r.id) ?? []).map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}
-                          </div>
-                        )}
+                  <summary className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#fcfbf8]">
+                    <RowCheckbox id={r.id} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">{r.nombre}</span>
+                        {esNuevo(r.creado_en, desde) && <span className="shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nuevo</span>}
+                      </div>
+                      <div className="truncate text-xs text-ink-2">
+                        {lista === "descartado" ? r.motivo_descarte : [str(f.lugar) || r.ciudad, r.estado_mx].filter(Boolean).join(" · ") || "Sin ubicación"}
                       </div>
                     </div>
-                    <div className="hidden min-w-0 truncate text-sm text-ink-2 sm:block" title={dolor}>
-                      {lista === "descartado" ? r.motivo_descarte : dolor || "—"}
-                    </div>
-                    <div className="hidden text-right text-sm sm:block">{cifra ? `unos ${mxn(cifra)}` : ""}</div>
-                    <div className="flex items-center gap-2 justify-self-end">
-                      <span className="flex items-center gap-1 text-ink-2" aria-label="Canales">
-                        {r.correo && <span title={`Correo: ${r.correo}`}><MailIcon /></span>}
-                        {r.whatsapp && <span title={`WhatsApp: ${r.whatsapp}`}><WhatsAppIcon /></span>}
-                        {r.instagram && <span title={`Instagram: ${r.instagram}`}><InstagramIcon /></span>}
-                      </span>
-                      {r.score != null && lista !== "descartado" && <span className="font-mono text-xs text-ink-3">{r.score}</span>}
-                      <Badge tone={est.tone}>{est.label}</Badge>
-                    </div>
+                    <span className="flex shrink-0 items-center gap-1 text-ink-2" aria-label="Canales">
+                      {r.correo && <span title={`Correo: ${r.correo}`}><MailIcon /></span>}
+                      {r.whatsapp && <span title={`WhatsApp: ${r.whatsapp}`}><WhatsAppIcon /></span>}
+                      {r.instagram && <span title={`Instagram: ${r.instagram}`}><InstagramIcon /></span>}
+                    </span>
+                    <Badge tone={est.tone}>{est.label}</Badge>
                   </summary>
-                  <div className="space-y-5 bg-[#fcfbf8] px-5 pb-6 pt-2 text-sm">
-                    <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[10rem_1fr]">
-                      {r.correo && (
+                  <div className="space-y-4 bg-[#fcfbf8] px-5 pb-5 pt-1 text-sm">
+                    {(() => {
+                      const campos = FIELDS.filter(([k], i, xs) => str(f[k]) && xs.findIndex(([, l]) => l === xs[i][1]) === i);
+                      const principales = campos.filter(([k]) => ["vimos", "tipo", "siguiente", "evento_actual"].includes(k)).slice(0, 3);
+                      const resto = campos.filter((c) => !principales.includes(c) && !["vende", "cobra"].includes(c[0]));
+                      return (
                         <>
-                          <dt className="text-ink-2">Correo</dt>
-                          <dd className="font-mono text-xs">{r.correo}</dd>
+                          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_1fr]">
+                            {r.correo && (
+                              <>
+                                <dt className="text-ink-2">Correo</dt>
+                                <dd className="font-mono text-xs">{r.correo}</dd>
+                              </>
+                            )}
+                            {(principales.length ? principales : campos.slice(0, 2)).map(([k, label]) => (
+                              <div key={k} className="contents">
+                                <dt className="text-ink-2">{label}</dt>
+                                <dd><Assumable text={str(f[k])} /></dd>
+                              </div>
+                            ))}
+                            {dolor && (
+                              <>
+                                <dt className="text-ink-2">Cómo cobra hoy</dt>
+                                <dd>{dolor}{cifra ? <span className="text-ink-2"> · gancho: unos {mxn(cifra)}</span> : null}</dd>
+                              </>
+                            )}
+                          </dl>
+                          <details className="group/mas">
+                            <summary className="cursor-pointer text-xs text-ink-3 hover:text-ink">Ver más: datos, puntaje y evidencia</summary>
+                            <div className="mt-3 space-y-4">
+                              {resto.length > 0 && (
+                                <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_1fr]">
+                                  {resto.map(([k, label]) => (
+                                    <div key={k} className="contents">
+                                      <dt className="text-ink-2">{label}</dt>
+                                      <dd><Assumable text={str(f[k])} /></dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              )}
+                              {(tagMap.get(r.id) ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {(tagMap.get(r.id) ?? []).map((t) => <TagChip key={t.id} nombre={t.nombre} color={t.color} />)}
+                                </div>
+                              )}
+                              {scoreLines(r.score_detalle_json).length > 0 && (
+                                <div>
+                                  <p className="mb-1 text-ink-2">Puntaje: {r.score}</p>
+                                  <ul className="flex flex-wrap gap-1.5">
+                                    {scoreLines(r.score_detalle_json).map((x) => (
+                                      <li key={x.clave}><Badge tone={x.peso < 0 ? "bad" : "neutral"}>{x.peso > 0 ? "+" : ""}{x.peso} {x.descripcion}</Badge></li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {(ev.length > 0 || fuentes.length > 0) && (
+                                <div>
+                                  <p className="mb-1 text-ink-2">Evidencia</p>
+                                  <ul className="space-y-1">
+                                    {(ev.length ? ev : fuentes.map((raw) => ({ url: raw.split(/\s+/)[0], que_demuestra: raw.split(/\s+/).slice(1).join(" "), cita: null, tipo: "verificado" }))).map((e, i) => (
+                                      <li key={`${i}-${e.url}`} className="break-all">
+                                        <a href={e.url} target="_blank" rel="noreferrer noopener" className="text-accent underline-offset-4 hover:underline">{e.url}</a>
+                                        {e.que_demuestra && <span className="text-ink-2"> · {e.que_demuestra}</span>}
+                                        {e.tipo === "suposicion" && <mark className="suposicion ml-1">SUPOSICIÓN</mark>}
+                                        {e.cita && <blockquote className="mt-1 border-l-2 border-line-strong pl-3 text-ink-2">“{e.cita}”</blockquote>}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </details>
                         </>
-                      )}
-                      {FIELDS.filter(([k]) => str(f[k])).map(([k, label]) => (
-                        <div key={k} className="contents">
-                          <dt className="text-ink-2">{label}</dt>
-                          <dd><Assumable text={str(f[k])} /></dd>
-                        </div>
-                      ))}
-                    </dl>
-                    {scoreLines(r.score_detalle_json).length > 0 && (
-                      <div>
-                        <p className="mb-1 text-ink-2">Por qué tiene {r.score} puntos</p>
-                        <ul className="flex flex-wrap gap-1.5">
-                          {scoreLines(r.score_detalle_json).map((s) => (
-                            <li key={s.clave}><Badge tone={s.peso < 0 ? "bad" : "neutral"}>{s.peso > 0 ? "+" : ""}{s.peso} {s.descripcion}</Badge></li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {(ev.length > 0 || fuentes.length > 0) && (
-                      <div>
-                        <p className="mb-1 text-ink-2">Evidencia</p>
-                        <ul className="space-y-1">
-                          {(ev.length ? ev : fuentes.map((raw) => ({ url: raw.split(/\s+/)[0], que_demuestra: raw.split(/\s+/).slice(1).join(" "), cita: null, tipo: "verificado" }))).map((e, i) => (
-                            <li key={`${i}-${e.url}`} className="break-all">
-                              <a href={e.url} target="_blank" rel="noreferrer noopener" className="text-accent underline-offset-4 hover:underline">{e.url}</a>
-                              {e.que_demuestra && <span className="text-ink-2"> · {e.que_demuestra}</span>}
-                              {e.tipo === "suposicion" && <mark className="suposicion ml-1">SUPOSICIÓN</mark>}
-                              {e.cita && <blockquote className="mt-1 border-l-2 border-line-strong pl-3 text-ink-2">“{e.cita}”</blockquote>}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      );
+                    })()}
                     <ProspectActions
                       prospectId={r.id}
                       canDraft={Boolean(r.correo) && ["investigado", "en_espera"].includes(r.estado) && lista !== "descartado"}

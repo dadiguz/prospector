@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { archiveSegment, saveSegment } from "@/app/actions";
 import { Field } from "@/components/wand-field";
+import { More } from "@/components/info";
 import { toast } from "@/components/toaster";
 import { SearchForm } from "./search-form";
 
@@ -19,15 +20,17 @@ export function SegmentCard({ projectId, seg, contexto, defaultBudget }: { proje
         <>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 max-w-2xl">
-              <h3 className="font-medium">{seg.nombre}</h3>
-              <p className="mt-1 text-sm text-ink-2">{seg.definicion}</p>
-              {seg.enviados > 0 && (
-                <p className="mt-2 text-xs text-ink-3">
-                  {seg.enviados} enviados · {seg.positivos} positivos
-                </p>
-              )}
+              <h3 className="font-medium">
+                {seg.nombre}
+                {seg.enviados > 0 && (
+                  <span className="ml-2 text-xs font-normal text-ink-3">
+                    {seg.enviados} enviados · {seg.positivos} positivos
+                  </span>
+                )}
+              </h3>
+              <More lines={1} className="mt-0.5 text-sm text-ink-2">{seg.definicion}</More>
             </div>
-            <button type="button" className="btn btn-quiet shrink-0 text-sm" onClick={() => setEditando(true)}>
+            <button type="button" className="btn btn-quiet shrink-0 py-1 text-xs" onClick={() => setEditando(true)}>
               Editar
             </button>
           </div>

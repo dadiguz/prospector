@@ -71,12 +71,12 @@ export function FormMessage({ state }: { state: FormState }) {
   return null;
 }
 
-export function CopyButton({ text, label = "Copiar" }: { text: string; label?: string }) {
+export function CopyButton({ text, label = "Copiar", className = "btn" }: { text: string; label?: string; className?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
       type="button"
-      className="btn"
+      className={className}
       onClick={async () => {
         await navigator.clipboard.writeText(text);
         setDone(true);
