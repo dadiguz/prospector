@@ -17,6 +17,7 @@ import { SeenTracker } from "@/components/seen-tracker";
 import { Info } from "@/components/info";
 
 const LISTAS = [
+  { key: "todos", label: "Todos" },
   { key: "A", label: "Lista A" },
   { key: "B", label: "Lista B" },
   { key: "solo_wa_ig", label: "Sin correo" },
@@ -52,11 +53,11 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
   const todos = sp.todos === "1";
   const canal: Canal | null = sp.canal === "correo" || sp.canal === "whatsapp" ? sp.canal : null;
-  let lista = LISTAS.some((l) => l.key === sp.lista) ? (sp.lista as string) : "A";
+  let lista = LISTAS.some((l) => l.key === sp.lista) ? (sp.lista as string) : "todos";
   if (!sp.lista && tagId) {
     // Desde "Ver resultados": abrir la primera lista con prospectos de esa búsqueda.
-    const { counts: c0 } = await listProspects(project.id, "A", false, tagId, canal);
-    lista = LISTAS.find((l) => (c0.find((x) => x.lista === l.key)?.total ?? 0) > 0)?.key ?? "A";
+    const { counts: c0 } = await listProspects(project.id, "todos", false, tagId, canal);
+    lista = c0.some((x) => x.lista !== "descartado" && x.total > 0) ? "todos" : "descartado";
   }
   const { rows, counts, canales } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId, canal);
   const tagMap = tagsByProspect(rows.map((r) => r.id));
@@ -87,8 +88,8 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
       {nuevos > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevos} nuevo(s)</p>}
       <div className="mb-5 flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-line pb-3">
         {LISTAS.map((l) => {
-          const c = counts.find((x) => x.lista === l.key);
-          const n = l.key === "descartado" || todos ? c?.total ?? 0 : c?.pendientes ?? 0;
+          const cs = l.key === "todos" ? counts.filter((x) => x.lista !== "descartado") : counts.filter((x) => x.lista === l.key);
+          const n = cs.reduce((a, c) => a + (l.key === "descartado" || todos ? c.total : c.pendientes ?? 0), 0);
           return (
             <Link
               key={l.key}
@@ -101,7 +102,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
         })}
         <Info label="Qué es cada lista" className="ml-1">
           <b className="font-medium text-ink">Lista A:</b> correo verificado y buen perfil. <b className="font-medium text-ink">Lista B:</b> perfil más débil o correo dudoso.{" "}
-          <b className="font-medium text-ink">Sin correo:</b> solo WhatsApp o Instagram. El número cuenta los que faltan por revisar.
+          <b className="font-medium text-ink">Sin correo:</b> solo WhatsApp o Instagram. <b className="font-medium text-ink">Todos:</b> las tres juntas, sin descartados. El número cuenta los que faltan por revisar.
         </Info>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {([
@@ -170,6 +171,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
                       {r.whatsapp && <span title={`WhatsApp: ${r.whatsapp}`}><WhatsAppIcon /></span>}
                       {r.instagram && <span title={`Instagram: ${r.instagram}`}><InstagramIcon /></span>}
                     </span>
+                    {lista === "todos" && <span className="w-16 shrink-0 text-right text-xs text-ink-3">{LISTAS.find((l) => l.key === r.lista)?.label ?? ""}</span>}
                     <Badge tone={est.tone}>{est.label}</Badge>
                   </summary>
                   <div className="space-y-4 bg-[#fcfbf8] px-5 pb-5 pt-1 text-sm">

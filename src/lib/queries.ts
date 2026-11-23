@@ -82,6 +82,8 @@ export async function listProspects(projectId: number, lista: string, soloPendie
   await io();
   backfillChannels(projectId);
   const pend = soloPendientes ? "AND p.estado IN ('investigado','en_espera','borrador')" : "";
+  // "todos": todas las listas menos los descartados.
+  const listaSql = lista === "todos" ? "p.lista <> 'descartado' AND ? = 'todos'" : "p.lista = ?";
   const rows = all<ProspectRow & { instagram: string | null }>(
     `SELECT p.id, o.nombre, o.ciudad, o.estado AS estado_mx, p.lista, p.estado, p.score, p.score_detalle_json, p.ficha_json,
        p.motivo_descarte, p.no_contactar_antes_de, p.creado_en,
@@ -91,8 +93,8 @@ export async function listProspects(projectId: number, lista: string, soloPendie
        (SELECT COUNT(*) FROM messages m WHERE m.prospect_id = p.id AND m.estado IN ('borrador','aprobado')) tiene_borrador,
        r.etiqueta
      FROM prospects p JOIN organizations o ON o.id = p.organization_id LEFT JOIN search_runs r ON r.id = p.search_run_id
-     WHERE p.project_id = ? AND p.lista = ? AND ${tagFilterSql("p.id")} ${pend} ${canalSql(canal)}
-     ORDER BY CASE p.estado WHEN 'investigado' THEN 0 WHEN 'borrador' THEN 1 WHEN 'en_espera' THEN 2 ELSE 3 END, p.score DESC, p.id DESC
+     WHERE p.project_id = ? AND ${listaSql} AND ${tagFilterSql("p.id")} ${pend} ${canalSql(canal)}
+     ORDER BY CASE p.estado WHEN 'investigado' THEN 0 WHEN 'borrador' THEN 1 WHEN 'en_espera' THEN 2 ELSE 3 END, CASE p.lista WHEN 'A' THEN 0 WHEN 'B' THEN 1 ELSE 2 END, p.score DESC, p.id DESC
      LIMIT 300`,
     projectId, lista, tag, tag,
   );
@@ -104,7 +106,7 @@ export async function listProspects(projectId: number, lista: string, soloPendie
   // Cuántos de la lista actual se pueden contactar por cada canal (para los botones de filtro).
   const canales = all<{ correo: number; whatsapp: number }>(
     `SELECT SUM(${HAS_CORREO}) correo, SUM(${HAS_WA}) whatsapp FROM prospects p
-     WHERE p.project_id = ? AND p.lista = ? AND ${tagFilterSql("p.id")} ${pend}`,
+     WHERE p.project_id = ? AND ${listaSql} AND ${tagFilterSql("p.id")} ${pend}`,
     projectId, lista, tag, tag,
   )[0];
   return { rows, counts, canales: { correo: canales?.correo ?? 0, whatsapp: canales?.whatsapp ?? 0 } };

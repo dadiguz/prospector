@@ -45,7 +45,7 @@ export function contextoPantalla(projectId: number, seccion: Seccion, filtros: {
     `Proyecto: ${p.nombre}. ${p.idea}`,
     `Pantalla: ${{ resumen: "Resumen del proyecto (segmentos y búsquedas)", prospectos: "Prospectos", borradores: "Borradores", respuestas: "Respuestas", editar: "Editor del proyecto" }[seccion]}`,
   ];
-  if (seccion === "prospectos") lineas.push(`Lista que ve: ${filtros.lista ?? "A"}`);
+  if (seccion === "prospectos") lineas.push(`Lista que ve: ${filtros.lista ?? "todos (A, B y sin correo)"}`);
   if (etiqueta) lineas.push(`Filtrado por la etiqueta "${etiqueta}"`);
   const b = draftsOf(projectId);
   const conError = b.filter((d) => count(json<Issue[]>(d.validacion_json, []), "error") > 0).length;
