@@ -69,8 +69,10 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
   const fromPath = pathname.match(/^\/proyectos\/([^/]+)/)?.[1];
   // Último proyecto abierto: así Ajustes o Inicio siguen mostrando el menú de ese proyecto.
   const last = useSyncExternalStore(subscribeLast, readLast, () => null);
-  const slugActual = fromPath && fromPath !== "nuevo" ? decodeURIComponent(fromPath) : last;
-  const actual = projects.find((p) => p.slug === slugActual) ?? projects[0];
+  const nuevo = fromPath === "nuevo";
+  const slugActual = fromPath && !nuevo ? decodeURIComponent(fromPath) : last;
+  // En "Nuevo proyecto" no hay proyecto seleccionado.
+  const actual = nuevo ? undefined : (projects.find((p) => p.slug === slugActual) ?? projects[0]);
 
   useEffect(() => {
     if (fromPath && fromPath !== "nuevo") writeLast(decodeURIComponent(fromPath));
@@ -103,7 +105,7 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
         Prospector
       </Link>
 
-      {actual ? (
+      {projects.length > 0 ? (
         <div ref={pickerRef} className="relative">
           <span className="mb-1 block px-3 text-[11px] font-medium uppercase tracking-wider text-ink-3">Proyecto</span>
           <button
@@ -112,8 +114,12 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
             aria-expanded={picker}
             className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm hover:border-line-strong"
           >
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft font-serif text-sm text-accent">{actual.nombre.slice(0, 1)}</span>
-            <span className="flex-1 truncate font-medium">{actual.nombre}</span>
+            {actual ? (
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft font-serif text-sm text-accent">{actual.nombre.slice(0, 1)}</span>
+            ) : (
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-3"><Plus size={14} strokeWidth={1.8} aria-hidden /></span>
+            )}
+            <span className="flex-1 truncate font-medium">{actual ? actual.nombre : "Nuevo proyecto"}</span>
             <span className="text-ink-3">{ICON.chevron}</span>
           </button>
           {picker && (
@@ -123,17 +129,18 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
                   key={p.slug}
                   href={`/proyectos/${p.slug}`}
                   onClick={() => { setPicker(false); cerrar(); }}
-                  className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-[#f3f1ea] ${p.slug === actual.slug ? "font-medium" : ""}`}
+                  className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-[#f3f1ea] ${p.slug === actual?.slug ? "font-medium" : ""}`}
                 >
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent-soft font-serif text-xs text-accent">{p.nombre.slice(0, 1)}</span>
                   <span className="flex-1 truncate">{p.nombre}</span>
                   {p.buscando > 0 && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" title="Buscando" />}
-                  {p.slug === actual.slug && <Check size={15} strokeWidth={2} className="text-accent" aria-hidden />}
+                  {p.slug === actual?.slug && <Check size={15} strokeWidth={2} className="text-accent" aria-hidden />}
                 </Link>
               ))}
               <div className="my-1 border-t border-line" />
-              <Link href="/proyectos/nuevo" onClick={() => { setPicker(false); cerrar(); }} className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-2 hover:bg-[#f3f1ea]">
-                {ICON.mas} Nuevo proyecto
+              <Link href="/proyectos/nuevo" onClick={() => { setPicker(false); cerrar(); }} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-[#f3f1ea] ${nuevo ? "font-medium text-ink" : "text-ink-2"}`}>
+                {ICON.mas} <span className="flex-1">Nuevo proyecto</span>
+                {nuevo && <Check size={15} strokeWidth={2} className="text-accent" aria-hidden />}
               </Link>
               <Link href="/#importar" onClick={() => { setPicker(false); cerrar(); }} className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-2 hover:bg-[#f3f1ea]">
                 <span className="w-[18px]" /> Importar .md

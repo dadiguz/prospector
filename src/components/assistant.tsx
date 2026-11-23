@@ -5,8 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { applyAssistant } from "@/app/actions";
 import type { Propuesta, Seccion } from "@/lib/assistant";
 import { toast } from "./toaster";
-import { Sparkles, X } from "lucide-react";
-import { ArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowUp, LoaderCircle, Sparkles, X } from "lucide-react";
 
 type Mensaje =
   | { rol: "usuario"; texto: string }
@@ -31,6 +30,63 @@ function contexto(pathname: string): { slug: string; seccion: Seccion } | null {
 
 /** Asistente: un input flotante que conoce el proyecto y la pantalla, y propone cambios que tú apruebas. */
 export function Assistant() {
+  const pathname = usePathname();
+  return pathname === "/proyectos/nuevo" ? <IdeaInput /> : <ProjectAssistant />;
+}
+
+/** En "Nuevo proyecto": describe la idea y el editor llena los campos. */
+function IdeaInput() {
+  const [texto, setTexto] = useState("");
+  const [generando, setGenerando] = useState(false);
+  useEffect(() => {
+    const onEstado = (e: Event) => setGenerando((e as CustomEvent<boolean>).detail);
+    window.addEventListener("proyecto:estado", onEstado);
+    return () => window.removeEventListener("proyecto:estado", onEstado);
+  }, []);
+  const enviar = () => {
+    const idea = texto.trim();
+    if (idea.length < 10 || generando) return;
+    window.dispatchEvent(new CustomEvent("proyecto:generar", { detail: idea }));
+    setTexto("");
+  };
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 lg:left-60 max-xl:pr-44">
+      <div className="pointer-events-auto flex w-full max-w-2xl flex-col">
+        <form
+          className="flex items-end gap-2 rounded-2xl border border-line-strong bg-surface py-2 pl-4 pr-2 shadow-lg focus-within:border-accent"
+          onSubmit={(e) => {
+            e.preventDefault();
+            enviar();
+          }}
+        >
+          <Sparkles size={16} strokeWidth={1.6} className="mb-2 shrink-0 text-accent" aria-hidden />
+          <textarea
+            rows={1}
+            autoFocus
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                enviar();
+              }
+            }}
+            placeholder={generando ? "Llenando el proyecto…" : "Describe tu idea: qué vendes, a quién y qué quieres lograr"}
+            aria-label="Describe tu idea"
+            disabled={generando}
+            className="max-h-40 min-h-[2rem] flex-1 resize-none bg-transparent py-1.5 text-sm outline-none placeholder:text-ink-3"
+            style={{ fieldSizing: "content" } as React.CSSProperties}
+          />
+          <button type="submit" disabled={generando || texto.trim().length < 10} aria-label="Llenar el proyecto" className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white transition" style={{ opacity: generando || texto.trim().length < 10 ? 0.35 : 1 }}>
+            {generando ? <LoaderCircle size={16} strokeWidth={2} className="animate-spin" /> : <ArrowUp size={17} strokeWidth={2.2} />}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ProjectAssistant() {
   const pathname = usePathname();
   const sp = useSearchParams();
   const ctx = contexto(pathname);

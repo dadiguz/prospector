@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { WandSparkles } from "lucide-react";
+import { LoaderCircle, WandSparkles } from "lucide-react";
 import { Info } from "./info";
 import { improveField } from "@/app/actions";
 import type { Campo } from "@/lib/wand";
@@ -52,6 +52,14 @@ export function Wand({ campo, etiqueta, value, contexto, onApply }: WandProps) {
 
 /* ---------- Campos ---------- */
 
+export function FieldLoader() {
+  return (
+    <span className="shimmer absolute inset-0 flex items-start justify-end rounded-[10px] border border-line p-2.5 text-ink-3" aria-label="Generando">
+      <LoaderCircle size={15} strokeWidth={1.8} className="animate-spin" aria-hidden />
+    </span>
+  );
+}
+
 export type FieldProps = {
   label: string;
   hint?: string;
@@ -64,9 +72,11 @@ export type FieldProps = {
   mono?: boolean;
   /** Sin etiqueta visible (filas repetidas: la etiqueta va solo en la primera). */
   bare?: boolean;
+  /** Mientras se genera: muestra un esqueleto encima del campo. */
+  loading?: boolean;
 };
 
-export function Field({ label, hint, value, onChange, campo, contexto = "", rows, placeholder, mono, bare }: FieldProps) {
+export function Field({ label, hint, value, onChange, campo, contexto = "", rows, placeholder, mono, bare, loading }: FieldProps) {
   const cls = `${rows ? "textarea" : "input"} ${mono ? "font-mono text-[13px]" : ""}`;
   const style = campo ? { paddingRight: "2.25rem" } : undefined;
   return (
@@ -78,7 +88,8 @@ export function Field({ label, hint, value, onChange, campo, contexto = "", rows
         ) : (
           <input className={cls} style={style} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
         )}
-        {campo && <Wand campo={campo} etiqueta={label} value={value} contexto={contexto} onApply={onChange} />}
+        {campo && !loading && <Wand campo={campo} etiqueta={label} value={value} contexto={contexto} onApply={onChange} />}
+        {loading && <FieldLoader />}
       </span>
     </label>
   );

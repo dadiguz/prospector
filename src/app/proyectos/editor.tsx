@@ -1,23 +1,32 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { saveProject } from "@/app/actions";
-import { Field } from "@/components/wand-field";
+import { Field, FieldLoader } from "@/components/wand-field";
+import { PARTES, type Parte } from "@/lib/project-gen-partes";
 import { Info } from "@/components/info";
 import type { ProjectDoc, Fact } from "@/lib/project-md";
 import type { Campo } from "@/lib/wand";
 import { hookFigure, mxn } from "@/lib/hook-formula";
 import { Plus, X } from "lucide-react";
 
-function Card({ n, title, hint, children }: { n: number; title: string; hint?: string; children: ReactNode }) {
+function Card({ n, title, hint, children, loading }: { n: number; title: string; hint?: string; children: ReactNode; loading?: boolean }) {
   return (
     <section className="card p-6 sm:p-8">
       <div className="mb-6 flex items-center gap-3">
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1efe8] text-xs font-medium text-ink-2">{n}</span>
         <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">{title}{hint && <Info label={`Sobre ${title}`}>{hint}</Info>}</h2>
       </div>
-      <div className="space-y-5">{children}</div>
+      {loading ? (
+        <div className="space-y-3" aria-label="Generando">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="relative h-9"><FieldLoader /></div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-5">{children}</div>
+      )}
     </section>
   );
 }
@@ -53,6 +62,52 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ error?: string; message?: string } | null>(null);
   const router = useRouter();
+  // Partes que se están generando desde la idea (solo en un proyecto nuevo).
+  const [cargando, setCargando] = useState<Parte[]>([]);
+  const gen = (p: Parte) => cargando.includes(p);
+  useEffect(() => {
+    if (existingSlug) return;
+    const onGenerar = async (e: Event) => {
+      const idea = (e as CustomEvent<string>).detail;
+      setMsg(null);
+      setCargando(PARTES);
+      setD((x) => ({ ...x, idea }));
+      window.dispatchEvent(new CustomEvent("proyecto:estado", { detail: true }));
+      try {
+        const res = await fetch("/api/proyecto-idea", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idea }) });
+        if (!res.ok || !res.body) throw new Error((await res.json().catch(() => null))?.error ?? "No se pudo generar.");
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n")) >= 0) {
+            const linea = buf.slice(0, i);
+            buf = buf.slice(i + 1);
+            if (!linea.trim()) continue;
+            const ev = JSON.parse(linea) as { tipo: string; parte?: Parte; data?: Partial<ProjectDoc>; error?: string };
+            if (ev.tipo === "parte" && ev.parte) {
+              setD((x) => ({ ...x, ...ev.data }));
+              setCargando((c) => c.filter((p) => p !== ev.parte));
+            } else if (ev.tipo === "error") {
+              setMsg({ error: ev.error });
+              if (ev.parte) setCargando((c) => c.filter((p) => p !== ev.parte));
+            }
+          }
+        }
+      } catch (err) {
+        setMsg({ error: err instanceof Error ? err.message : String(err) });
+      } finally {
+        setCargando([]);
+        window.dispatchEvent(new CustomEvent("proyecto:estado", { detail: false }));
+      }
+    };
+    window.addEventListener("proyecto:generar", onGenerar);
+    return () => window.removeEventListener("proyecto:generar", onGenerar);
+  }, [existingSlug]);
   const set = <K extends keyof ProjectDoc>(k: K, v: ProjectDoc[K]) => setD((x) => ({ ...x, [k]: v }));
 
   const base = `Proyecto: ${d.nombre || "(sin nombre)"}\nEmpresa: ${d.empresa}\nIdea: ${d.idea}\nPropuesta de valor: ${d.propuesta_valor}`;
@@ -76,28 +131,28 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
         <div className="flex items-center gap-2">
           {msg?.error && <span className="text-sm text-bad">{msg.error}</span>}
           <button type="button" className="btn btn-quiet" onClick={() => router.back()}>Cancelar</button>
-          <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Guardando…" : existingSlug ? "Guardar cambios" : "Crear proyecto"}</button>
+          <button type="button" className="btn btn-primary" disabled={pending || cargando.length > 0} onClick={save}>{pending ? "Guardando…" : existingSlug ? "Guardar cambios" : "Crear proyecto"}</button>
         </div>
       </div>
       <Card n={1} title="Lo básico">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nombre del proyecto" value={d.nombre} onChange={(v) => set("nombre", v)} campo="nombre" contexto={base} placeholder="Ej. Sistema de reservas" />
+          <Field loading={gen("basico")} label="Nombre del proyecto" value={d.nombre} onChange={(v) => set("nombre", v)} campo="nombre" contexto={base} placeholder="Ej. Sistema de reservas" />
           <Field label="Empresa" value={d.empresa} onChange={(v) => set("empresa", v)} placeholder="Tu empresa y ciudad" />
         </div>
-        <Field label="Idea" rows={2} value={d.idea} onChange={(v) => set("idea", v)} campo="idea" contexto={base} placeholder="Qué quieres lograr con esta prospección" />
-        <Field label="Propuesta de valor" rows={4} value={d.propuesta_valor} onChange={(v) => set("propuesta_valor", v)} campo="propuesta_valor" contexto={base + ficha} hint="Base de todos los correos. Qué es, para quién y qué cambia." />
+        <Field loading={gen("basico")} label="Idea" rows={2} value={d.idea} onChange={(v) => set("idea", v)} campo="idea" contexto={base} placeholder="Qué quieres lograr con esta prospección" />
+        <Field loading={gen("basico")} label="Propuesta de valor" rows={4} value={d.propuesta_valor} onChange={(v) => set("propuesta_valor", v)} campo="propuesta_valor" contexto={base + ficha} hint="Base de todos los correos. Qué es, para quién y qué cambia." />
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Métrica principal" value={d.metrica_principal} onChange={(v) => set("metrica_principal", v)} campo="metrica_principal" contexto={base} />
-          <Field label="Conversión" value={d.conversion} onChange={(v) => set("conversion", v)} campo="conversion" contexto={base} hint="Qué cuenta como cliente ganado" />
-          <Field label="Meta actual" value={d.meta_actual} onChange={(v) => set("meta_actual", v)} campo="meta_actual" contexto={base} />
+          <Field loading={gen("basico")} label="Métrica principal" value={d.metrica_principal} onChange={(v) => set("metrica_principal", v)} campo="metrica_principal" contexto={base} />
+          <Field loading={gen("basico")} label="Conversión" value={d.conversion} onChange={(v) => set("conversion", v)} campo="conversion" contexto={base} hint="Qué cuenta como cliente ganado" />
+          <Field loading={gen("basico")} label="Meta actual" value={d.meta_actual} onChange={(v) => set("meta_actual", v)} campo="meta_actual" contexto={base} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Voz" value={d.voz} onChange={(v) => set("voz", v)} campo="voz" contexto={base} />
-          <Field label="Etiqueta de Gmail" value={d.gmailEtiqueta} onChange={(v) => set("gmailEtiqueta", v)} placeholder={`Prospección/${d.nombre || "Proyecto"}`} />
+          <Field loading={gen("basico")} label="Voz" value={d.voz} onChange={(v) => set("voz", v)} campo="voz" contexto={base} />
+          <Field loading={gen("basico")} label="Etiqueta de Gmail" value={d.gmailEtiqueta} onChange={(v) => set("gmailEtiqueta", v)} placeholder={`Prospección/${d.nombre || "Proyecto"}`} />
         </div>
       </Card>
 
-      <Card n={2} title="Ficha de verdad" hint="Lo que se puede y no se puede decir. El validador la usa para bloquear promesas falsas.">
+      <Card n={2} loading={gen("ficha")} title="Ficha de verdad" hint="Lo que se puede y no se puede decir. El validador la usa para bloquear promesas falsas.">
         {FACT_GROUPS.map((g) => (
           <div key={g.tipo} className="space-y-3 border-t border-line pt-6 first:border-0 first:pt-0">
             <h3 className="flex items-center gap-1.5 text-sm font-medium">{g.title}<Info label={g.title}>{g.hint}</Info></h3>
@@ -122,7 +177,7 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
         ))}
       </Card>
 
-      <Card n={3} title="Gancho" hint="Una cifra que el prospecto entiende al instante. P es el precio de cada prospecto.">
+      <Card n={3} loading={gen("ficha")} title="Gancho" hint="Una cifra que el prospecto entiende al instante. P es el precio de cada prospecto.">
         {!hook ? (
           <AddButton onClick={() => set("hook", { clave: "", nombre: "", formula: "", multiplicador: 100, redondeo: 100, frase: "unos {cifra} por cada 100 ventas", condicion: "", supuestos: [] })}>
             Agregar un gancho
@@ -156,7 +211,7 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
         )}
       </Card>
 
-      <Card n={4} title="Perfil del cliente ideal" hint="Atributos observables con su peso. Suman al puntaje de cada prospecto; los negativos restan.">
+      <Card n={4} loading={gen("perfil")} title="Perfil del cliente ideal" hint="Atributos observables con su peso. Suman al puntaje de cada prospecto; los negativos restan.">
         {d.pesos.map((p, i) => (
           <RowShell key={i} onRemove={() => set("pesos", d.pesos.filter((_, j) => j !== i))}>
             <div className="grid gap-2 sm:grid-cols-[6rem_1fr]">
@@ -178,7 +233,7 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
         <AddButton onClick={() => set("pesos", [...d.pesos, { clave: "", descripcion: "", peso: 10 }])}>Agregar atributo</AddButton>
       </Card>
 
-      <Card n={5} title="Descalificadores" hint="Reglas que sacan a un prospecto. Duro: se descarta. Blando: se pospone o baja de prioridad.">
+      <Card n={5} loading={gen("perfil")} title="Descalificadores" hint="Reglas que sacan a un prospecto. Duro: se descarta. Blando: se pospone o baja de prioridad.">
         {d.descalificadores.map((q, i) => (
           <RowShell key={i} onRemove={() => set("descalificadores", d.descalificadores.filter((_, j) => j !== i))}>
             <div className="grid gap-2 sm:grid-cols-[7rem_2fr_1fr]">
@@ -197,7 +252,7 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
         <AddButton onClick={() => set("descalificadores", [...d.descalificadores, { regla: "", tipo: "duro", origen: "" }])}>Agregar regla</AddButton>
       </Card>
 
-      <Card n={6} title="Segmentos">
+      <Card n={6} loading={gen("segmentos")} title="Segmentos">
         {d.segmentos.map((s, i) => {
           const upd = (patch: Partial<typeof s>) => set("segmentos", d.segmentos.map((x, j) => (j === i ? { ...x, ...patch } : x)));
           const ctx = `${base}${perfil}\nSegmento: ${s.nombre}\n${s.definicion}`;
@@ -224,7 +279,7 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
         <AddButton onClick={() => set("segmentos", [...d.segmentos, { nombre: "", definicion: "", consultas: [""] }])}>Agregar segmento</AddButton>
       </Card>
 
-      <Card n={7} title="Mensajes" hint="Plantillas con variables entre llaves: {saludo}, {observacion}, {cifra}, {evento_siguiente}, {que_venden}, {empresa_corta}.">
+      <Card n={7} loading={gen("mensajes")} title="Mensajes" hint="Plantillas con variables entre llaves: {saludo}, {observacion}, {cifra}, {evento_siguiente}, {que_venden}, {empresa_corta}.">
         <Field
           label="Asunto del correo"
           value={d.plantillaCorreo?.asunto ?? ""}
@@ -253,12 +308,12 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
       </Card>
 
       <Card n={8} title="Investigación y territorio">
-        <Field label="Instrucciones de investigación" rows={4} value={d.investigacion} onChange={(v) => set("investigacion", v)} campo="investigacion" contexto={base + perfil} />
+        <Field loading={gen("basico")} label="Instrucciones de investigación" rows={4} value={d.investigacion} onChange={(v) => set("investigacion", v)} campo="investigacion" contexto={base + perfil} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Estados excluidos" value={csv(d.territorio.excluidos)} onChange={(v) => set("territorio", { ...d.territorio, excluidos: fromCsv(v) })} placeholder="separados por coma" />
           <Field label="Excepciones" value={d.territorio.excepciones.join("; ")} onChange={(v) => set("territorio", { ...d.territorio, excepciones: v.split(";").map((x) => x.trim()) })} placeholder="separadas por punto y coma" />
         </div>
-        <Field label="Nota de territorio" value={d.territorio.nota} onChange={(v) => set("territorio", { ...d.territorio, nota: v })} />
+        <Field loading={gen("perfil")} label="Nota de territorio" value={d.territorio.nota} onChange={(v) => set("territorio", { ...d.territorio, nota: v })} />
         <Field
           label="Sitios en los que no insistir"
           rows={3}
