@@ -89,7 +89,7 @@ export function ReviewReply({ replyId, actual }: { replyId: number; actual: stri
       >
         {CLASIFICACIONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
-      <ActionButton action={() => confirmReply(replyId, actual)} className="btn py-1 text-xs">Es correcta</ActionButton>
+      <ActionButton action={() => confirmReply(replyId, actual)} className="btn btn-sm">Es correcta</ActionButton>
     </span>
   );
 }

@@ -1,5 +1,6 @@
 import { TagBar } from "./tag-bar";
 import type { ReactNode } from "react";
+import { ChevronRight, Mail } from "lucide-react";
 
 export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
   return (
@@ -27,7 +28,7 @@ export function Fold({ title, children, open }: { title: ReactNode; children: Re
     <details className="group border-t border-line py-3" open={open}>
       <summary className="flex items-center justify-between text-sm text-ink-2 hover:text-ink">
         <span>{title}</span>
-        <span className="text-ink-3 transition group-open:rotate-90">›</span>
+        <ChevronRight size={16} strokeWidth={1.7} className="text-ink-3 transition group-open:rotate-90" aria-hidden />
       </summary>
       <div className="pt-3">{children}</div>
     </details>
@@ -128,12 +129,7 @@ export function TagFilter({ tags, active, hrefFor }: { tags: { id: number; nombr
 
 /* Iconos de canal */
 export function MailIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 20 20" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <rect x="2.5" y="4.5" width="15" height="11" rx="2" />
-      <path d="M3 5.5l7 5 7-5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Mail size={size} strokeWidth={1.6} aria-hidden />;
 }
 export function WhatsAppIcon({ size = 16 }: { size?: number }) {
   return (

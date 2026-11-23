@@ -8,29 +8,30 @@ import { Info } from "@/components/info";
 import type { ProjectDoc, Fact } from "@/lib/project-md";
 import type { Campo } from "@/lib/wand";
 import { hookFigure, mxn } from "@/lib/hook-formula";
+import { Plus, X } from "lucide-react";
 
 function Card({ n, title, hint, children }: { n: number; title: string; hint?: string; children: ReactNode }) {
   return (
-    <section className="card p-6">
-      <div className="mb-5 flex items-baseline gap-3">
-        <span className="font-serif text-2xl text-ink-3">{n}</span>
-        <h2 className="flex items-center gap-2 font-medium">{title}{hint && <Info label={`Sobre ${title}`}>{hint}</Info>}</h2>
+    <section className="card p-6 sm:p-8">
+      <div className="mb-6 flex items-center gap-3">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1efe8] text-xs font-medium text-ink-2">{n}</span>
+        <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">{title}{hint && <Info label={`Sobre ${title}`}>{hint}</Info>}</h2>
       </div>
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-5">{children}</div>
     </section>
   );
 }
 
-function RowShell({ children, onRemove }: { children: ReactNode; onRemove: () => void }) {
+function RowShell({ children, onRemove, bare }: { children: ReactNode; onRemove: () => void; bare?: boolean }) {
   return (
     <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1">{children}</div>
-      <button type="button" onClick={onRemove} className="btn btn-quiet mt-6 px-2" aria-label="Quitar">×</button>
+      <button type="button" onClick={onRemove} className={`btn btn-quiet btn-icon text-ink-3 ${bare ? "" : "mt-[1.6rem]"}`} aria-label="Quitar"><X size={15} strokeWidth={1.8} /></button>
     </div>
   );
 }
 const AddButton = ({ onClick, children }: { onClick: () => void; children: ReactNode }) => (
-  <button type="button" onClick={onClick} className="btn btn-quiet text-sm">+ {children}</button>
+  <button type="button" onClick={onClick} className="btn btn-quiet btn-sm -ml-2" style={{ color: "var(--accent)" }}><Plus size={14} strokeWidth={2} aria-hidden />{children}</button>
 );
 
 const csv = (xs: string[]) => xs.join(", ");
@@ -47,7 +48,7 @@ const FACT_GROUPS: { tipo: Fact["tipo"]; title: string; hint: string; campo: Cam
   { tipo: "pendiente", title: "Pendiente de confirmar", hint: "No se promete hasta confirmarlo.", campo: "fact_pendiente", terminos: false },
 ];
 
-export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; existingSlug: string | null }) {
+export function ProjectEditor({ initial, existingSlug, title }: { initial: ProjectDoc; existingSlug: string | null; title: string }) {
   const [d, setD] = useState<ProjectDoc>(initial);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ error?: string; message?: string } | null>(null);
@@ -69,7 +70,15 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
     });
 
   return (
-    <div className="space-y-6 pb-28">
+    <div className="space-y-8 pb-16">
+      <div className="sticky top-0 z-20 -mx-4 -mt-2 flex flex-wrap items-center justify-between gap-3 bg-bg/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <h1 className="font-serif text-4xl leading-tight tracking-tight">{title}</h1>
+        <div className="flex items-center gap-2">
+          {msg?.error && <span className="text-sm text-bad">{msg.error}</span>}
+          <button type="button" className="btn btn-quiet" onClick={() => router.back()}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Guardando…" : existingSlug ? "Guardar cambios" : "Crear proyecto"}</button>
+        </div>
+      </div>
       <Card n={1} title="Lo básico">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Nombre del proyecto" value={d.nombre} onChange={(v) => set("nombre", v)} campo="nombre" contexto={base} placeholder="Ej. Sistema de reservas" />
@@ -90,23 +99,24 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
 
       <Card n={2} title="Ficha de verdad" hint="Lo que se puede y no se puede decir. El validador la usa para bloquear promesas falsas.">
         {FACT_GROUPS.map((g) => (
-          <div key={g.tipo} className="space-y-2 border-t border-line pt-4 first:border-0 first:pt-0">
-            <h3 className="text-sm font-medium">{g.title}</h3>
-            <p className="text-xs text-ink-3">{g.hint}</p>
-            {d.facts.map((f, i) =>
-              f.tipo !== g.tipo ? null : (
-                <RowShell key={i} onRemove={() => set("facts", d.facts.filter((_, j) => j !== i))}>
-                  <div className={`grid gap-2 ${g.terminos ? "sm:grid-cols-[2fr_1fr]" : "sm:grid-cols-[2fr_1fr]"}`}>
-                    <Field label="Afirmación" value={f.afirmacion} onChange={(v) => updFact(i, { afirmacion: v })} campo={g.campo} contexto={base + ficha} />
+          <div key={g.tipo} className="space-y-3 border-t border-line pt-6 first:border-0 first:pt-0">
+            <h3 className="flex items-center gap-1.5 text-sm font-medium">{g.title}<Info label={g.title}>{g.hint}</Info></h3>
+            {d.facts.map((f, i) => {
+              if (f.tipo !== g.tipo) return null;
+              const bare = d.facts.findIndex((x) => x.tipo === g.tipo) !== i;
+              return (
+                <RowShell key={i} bare={bare} onRemove={() => set("facts", d.facts.filter((_, j) => j !== i))}>
+                  <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+                    <Field bare={bare} label="Afirmación" value={f.afirmacion} onChange={(v) => updFact(i, { afirmacion: v })} campo={g.campo} contexto={base + ficha} />
                     {g.terminos ? (
-                      <Field label="Palabras que bloquean" value={csv(f.terminos)} onChange={(v) => updFact(i, { terminos: fromCsv(v) })} placeholder="separadas por coma" />
+                      <Field bare={bare} label="Palabras que bloquean" value={csv(f.terminos)} onChange={(v) => updFact(i, { terminos: fromCsv(v) })} placeholder="separadas por coma" />
                     ) : (
-                      <Field label="Evidencia" value={f.evidencia} onChange={(v) => updFact(i, { evidencia: v })} placeholder="Dónde lo comprobaste" />
+                      <Field bare={bare} label="Evidencia" value={f.evidencia} onChange={(v) => updFact(i, { evidencia: v })} placeholder="Dónde lo comprobaste" />
                     )}
                   </div>
                 </RowShell>
-              ),
-            )}
+              );
+            })}
             <AddButton onClick={() => set("facts", [...d.facts, { afirmacion: "", tipo: g.tipo, evidencia: "", terminos: [] }])}>Agregar</AddButton>
           </div>
         ))}
@@ -259,15 +269,6 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
         />
       </Card>
 
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <span className="text-sm text-bad">{msg?.error}</span>
-          <div className="flex gap-2">
-            <button type="button" className="btn btn-quiet" onClick={() => router.back()}>Cancelar</button>
-            <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Guardando…" : existingSlug ? "Guardar cambios" : "Crear proyecto"}</button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

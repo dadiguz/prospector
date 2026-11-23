@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Info as InfoIcon } from "lucide-react";
 
 /** Icono ⓘ: el detalle aparece al pasar el cursor o al tocarlo. Para lo que no hace falta ver siempre. */
 export function Info({ children, label = "Más información", className = "" }: { children: ReactNode; label?: string; className?: string }) {
@@ -19,7 +20,7 @@ export function Info({ children, label = "Más información", className = "" }: 
         type="button"
         aria-label={label}
         aria-expanded={open}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-line-strong text-[10px] font-semibold leading-none text-ink-3 hover:border-ink-2 hover:text-ink"
+        className="inline-flex items-center justify-center rounded-full text-ink-3 transition-colors hover:text-ink"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -27,12 +28,12 @@ export function Info({ children, label = "Más información", className = "" }: 
           setOpen(true);
         }}
       >
-        i
+        <InfoIcon size={15} strokeWidth={1.7} aria-hidden />
       </button>
       {open && (
         <span
           role="tooltip"
-          className="absolute left-1/2 top-full z-40 mt-1.5 block w-72 -translate-x-1/2 whitespace-normal rounded-xl border border-line bg-surface px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink-2 shadow-lg"
+          className="absolute left-1/2 top-full z-40 mt-1.5 block w-72 -translate-x-1/2 whitespace-normal rounded-xl border border-line bg-surface px-3.5 py-2.5 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink-2 shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           {children}

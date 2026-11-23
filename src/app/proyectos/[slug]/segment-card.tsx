@@ -6,6 +6,7 @@ import { Field } from "@/components/wand-field";
 import { More } from "@/components/info";
 import { toast } from "@/components/toaster";
 import { SearchForm } from "./search-form";
+import { X } from "lucide-react";
 
 export type SegmentData = { id: number; nombre: string; definicion: string; consultas: string[]; enviados: number; positivos: number; activos: number };
 
@@ -30,7 +31,7 @@ export function SegmentCard({ projectId, seg, contexto, defaultBudget }: { proje
               </h3>
               <More lines={1} className="mt-0.5 text-sm text-ink-2">{seg.definicion}</More>
             </div>
-            <button type="button" className="btn btn-quiet shrink-0 py-1 text-xs" onClick={() => setEditando(true)}>
+            <button type="button" className="btn btn-quiet btn-sm shrink-0" onClick={() => setEditando(true)}>
               Editar
             </button>
           </div>
@@ -73,8 +74,8 @@ export function SegmentEditor({ projectId, seg, contexto, onDone }: { projectId:
                 contexto={`${ctx}\nOtras búsquedas: ${consultas.filter((_, j) => j !== i).join(" | ")}`}
               />
             </div>
-            <button type="button" className="btn btn-quiet mt-6 px-2" aria-label="Quitar búsqueda" onClick={() => setConsultas((xs) => xs.filter((_, j) => j !== i))}>
-              ×
+            <button type="button" className="btn btn-quiet btn-icon mt-6 " aria-label="Quitar búsqueda" onClick={() => setConsultas((xs) => xs.filter((_, j) => j !== i))}>
+              <X size={15} strokeWidth={1.8} />
             </button>
           </div>
         ))}

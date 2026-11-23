@@ -6,6 +6,7 @@ import { suggestReply } from "@/app/actions";
 import { CopyButton } from "@/components/client";
 import { TagChip, MailIcon, WhatsAppIcon, InstagramIcon } from "@/components/ui";
 import type { HiloMensaje } from "@/app/api/respuestas/[id]/route";
+import { X } from "lucide-react";
 
 type Detalle = {
   respuesta: { id: number; clasificacion: string; fecha: string | null; resumen: string; quien_respondio: string | null; en_copia: string | null; pide: string | null; sugerencia: string | null };
@@ -79,7 +80,7 @@ export function ReplyDetailButton({ replyId, slug }: { replyId: number; slug: st
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-bg/95 px-6 py-4 backdrop-blur">
           <h2 className="truncate font-serif text-2xl">{data?.prospecto.nombre ?? "Detalle"}</h2>
-          <button type="button" className="btn btn-quiet px-2" aria-label="Cerrar" onClick={() => dialog.current?.close()}>×</button>
+          <button type="button" className="btn btn-quiet btn-icon" aria-label="Cerrar" onClick={() => dialog.current?.close()}><X size={16} strokeWidth={1.8} /></button>
         </div>
 
         {cargando && !data && <p className="px-6 py-8 text-sm text-ink-3">Cargando…</p>}

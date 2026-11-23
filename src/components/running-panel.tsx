@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { cancelJob } from "@/app/actions";
 import { TagChip } from "./ui";
 import { toast } from "./toaster";
+import { Minus } from "lucide-react";
 
 type Busqueda = {
   id: number; estado: string; mensaje: string | null; proyecto: string; slug: string;
@@ -104,8 +105,8 @@ export function RunningPanel() {
           {activas > 0 && <span className="h-2 w-2 animate-pulse rounded-full bg-accent" aria-hidden="true" />}
           {activas > 0 ? `Buscando (${activas})` : "Búsquedas recientes"}
         </h2>
-        <button type="button" className="btn btn-quiet px-2 py-0.5 text-xs" onClick={() => toggle(false)} aria-label="Minimizar">
-          Ocultar
+        <button type="button" className="btn btn-quiet btn-sm btn-icon" onClick={() => toggle(false)} aria-label="Minimizar">
+          <Minus size={15} strokeWidth={1.8} />
         </button>
       </div>
       <ul className="divide-y divide-line overflow-y-auto">

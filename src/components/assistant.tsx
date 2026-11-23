@@ -5,6 +5,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { applyAssistant } from "@/app/actions";
 import type { Propuesta, Seccion } from "@/lib/assistant";
 import { toast } from "./toaster";
+import { Sparkles, X } from "lucide-react";
+import { ArrowUp, LoaderCircle } from "lucide-react";
 
 type Mensaje =
   | { rol: "usuario"; texto: string }
@@ -127,7 +129,7 @@ export function Assistant() {
               <span>Asistente · {seccion === "resumen" ? "resumen del proyecto" : seccion}</span>
               <span className="flex gap-3">
                 <button type="button" className="hover:text-ink" onClick={() => setMensajes(() => [])} disabled={pensando}>Nueva conversación</button>
-                <button type="button" className="hover:text-ink" onClick={() => setAbierto(false)} aria-label="Cerrar">✕</button>
+                <button type="button" className="hover:text-ink" onClick={() => setAbierto(false)} aria-label="Cerrar"><X size={15} strokeWidth={1.8} /></button>
               </span>
             </div>
             <div ref={listaRef} className="space-y-3 overflow-y-auto px-4 py-3 text-sm">
@@ -169,7 +171,7 @@ export function Assistant() {
             enviar(texto);
           }}
         >
-          <span className="pb-1.5 text-accent" aria-hidden>✦</span>
+          <Sparkles size={16} strokeWidth={1.6} className="mb-2 shrink-0 text-accent" aria-hidden />
           <textarea
             ref={inputRef}
             rows={1}
@@ -182,14 +184,14 @@ export function Assistant() {
                 enviar(texto);
               }
             }}
-            placeholder={pensando ? "Trabajando…" : "Pídele algo al asistente: “arregla todas las alertas”…"}
+            placeholder={pensando ? "Trabajando…" : "Pídele algo al asistente"}
             aria-label="Mensaje para el asistente"
             className="max-h-40 min-h-[2rem] flex-1 resize-none bg-transparent py-1.5 text-sm outline-none placeholder:text-ink-3"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
-          <span className="hidden pb-2 text-[11px] text-ink-3 sm:inline">⌘K</span>
-          <button type="submit" disabled={pensando || !texto.trim()} className="rounded-xl bg-accent px-3 py-1.5 text-sm font-medium text-white" style={{ opacity: pensando || !texto.trim() ? 0.4 : 1 }}>
-            {pensando ? "…" : "Enviar"}
+          <kbd className="mb-2 hidden rounded-md border border-line px-1.5 font-sans text-[11px] text-ink-3 sm:inline">⌘K</kbd>
+          <button type="submit" disabled={pensando || !texto.trim()} aria-label="Enviar" className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white transition" style={{ opacity: pensando || !texto.trim() ? 0.35 : 1 }}>
+            {pensando ? <LoaderCircle size={16} strokeWidth={2} className="animate-spin" /> : <ArrowUp size={17} strokeWidth={2.2} />}
           </button>
         </form>
       </div>

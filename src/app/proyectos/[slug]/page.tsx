@@ -87,13 +87,13 @@ async function ProjectPageContent({ params }: PageProps<"/proyectos/[slug]">) {
                       </Link>
                     )}
                     {activa ? (
-                      <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet py-1 text-xs" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
+                      <ActionButton action={cancelJob.bind(null, j.id)} className="btn btn-quiet btn-sm" confirm="¿Cancelar esta búsqueda? Lo encontrado se queda.">
                         Cancelar
                       </ActionButton>
                     ) : (
                       <ActionButton
                         action={repeatSearch.bind(null, j.id)}
-                        className="btn btn-quiet py-1 text-xs"
+                        className="btn btn-quiet btn-sm"
                         pendingLabel="Iniciando…"
                         confirm={activeJob ? undefined : "¿Buscar de nuevo con lo mismo? No se repiten los que ya tienes."}
                       >

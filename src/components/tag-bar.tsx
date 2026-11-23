@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { TagChip } from "./ui";
+import { ChevronDown, X } from "lucide-react";
 
 export type TagItem = { id: number; nombre: string; color: string; total?: number; tipo?: string; href: string };
 
@@ -35,11 +36,11 @@ export function TagBar({ tags, active, clearHref, visibles = 0 }: { tags: TagIte
           <button type="button" onClick={() => dialog.current?.showModal()} title="Cambiar etiqueta">
             <TagChip nombre={activa.nombre} color={activa.color} active count={activa.total} />
           </button>
-          <Link href={clearHref} className="text-xs text-ink-3 hover:text-ink" aria-label="Quitar filtro">✕</Link>
+          <Link href={clearHref} className="text-xs text-ink-3 hover:text-ink" aria-label="Quitar filtro"><X size={13} strokeWidth={1.8} /></Link>
         </>
       ) : (
         <button type="button" className="inline-flex items-center gap-1 rounded-full border border-line-strong px-2.5 py-0.5 text-xs text-ink-2 hover:bg-[#efede5]" onClick={() => dialog.current?.showModal()}>
-          Etiqueta ▾
+          Etiqueta <ChevronDown size={14} strokeWidth={1.8} aria-hidden />
         </button>
       )}
 
@@ -50,7 +51,7 @@ export function TagBar({ tags, active, clearHref, visibles = 0 }: { tags: TagIte
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h2 className="font-medium">Todas las etiquetas</h2>
-          <button type="button" className="btn btn-quiet px-2" aria-label="Cerrar" onClick={() => dialog.current?.close()}>×</button>
+          <button type="button" className="btn btn-quiet btn-icon" aria-label="Cerrar" onClick={() => dialog.current?.close()}><X size={16} strokeWidth={1.8} /></button>
         </div>
         <div className="px-5 pt-4">
           <input className="input" placeholder="Buscar etiqueta" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />

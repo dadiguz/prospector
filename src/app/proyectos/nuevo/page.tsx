@@ -1,15 +1,13 @@
 import { Suspense } from "react";
 import { io } from "next/cache";
 import { emptyDoc } from "@/lib/project-md";
-import { PageTitle } from "@/components/ui";
 import { ProjectEditor } from "../editor";
 
 async function NuevoContent() {
   await io();
   return (
     <>
-      <PageTitle>Nuevo proyecto</PageTitle>
-      <ProjectEditor initial={emptyDoc()} existingSlug={null} />
+      <ProjectEditor title="Nuevo proyecto" initial={emptyDoc()} existingSlug={null} />
     </>
   );
 }

@@ -6,6 +6,7 @@ import { ActionButton, CopyButton, FormMessage, StatefulForm } from "@/component
 import type { Issue } from "@/lib/validator";
 import { Info } from "@/components/info";
 import { ARREGLOS_AUTO } from "@/lib/fix-labels";
+import { CircleX, TriangleAlert } from "lucide-react";
 
 type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[]; nuevo?: boolean };
 
@@ -138,7 +139,7 @@ function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean;
       {errors.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm">
           {errors.map((i, k) => (
-            <li key={`e${k}`} className="text-bad">✕ {i.regla}: {i.detalle}</li>
+            <li key={`e${k}`} className="flex items-start gap-1.5 text-bad"><CircleX size={15} strokeWidth={1.8} className="mt-0.5 shrink-0" aria-hidden /><span>{i.regla}: {i.detalle}</span></li>
           ))}
         </ul>
       )}
@@ -224,7 +225,7 @@ function Problems({ projectId, drafts }: { projectId: number; drafts: Draft[] })
         {grupos.map((g) => (
           <li key={g.regla} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
             <span className="flex min-w-0 items-center gap-2">
-              <span className={g.nivel === "error" ? "text-bad" : "text-warn"} aria-hidden>{g.nivel === "error" ? "✕" : "!"}</span>
+              {g.nivel === "error" ? <CircleX size={16} strokeWidth={1.8} className="shrink-0 text-bad" aria-hidden /> : <TriangleAlert size={16} strokeWidth={1.8} className="shrink-0 text-warn" aria-hidden />}
               <span>{g.regla}</span>
               <span className="text-xs text-ink-3">{g.drafts.length === 1 ? g.drafts[0].nombre : `${g.drafts.length} borradores`}</span>
               <Info label={`Detalle: ${g.regla}`}>

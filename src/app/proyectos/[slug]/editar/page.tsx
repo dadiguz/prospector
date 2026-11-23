@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getProject } from "@/lib/queries";
 import { readProject } from "@/lib/project-md";
-import { PageTitle } from "@/components/ui";
 import { ProjectEditor } from "../../editor";
 
 async function EditarContent({ params }: PageProps<"/proyectos/[slug]/editar">) {
@@ -11,8 +10,7 @@ async function EditarContent({ params }: PageProps<"/proyectos/[slug]/editar">) 
   if (!project) notFound();
   return (
     <>
-      <PageTitle>Editar proyecto</PageTitle>
-      <ProjectEditor initial={readProject(project.id)} existingSlug={project.slug} />
+      <ProjectEditor title="Editar proyecto" initial={readProject(project.id)} existingSlug={project.slug} />
     </>
   );
 }
