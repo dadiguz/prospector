@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
+import { Assistant } from "@/components/assistant";
 import { RunningPanel } from "@/components/running-panel";
 import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/toaster";
@@ -27,8 +28,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SidebarData />
         </Suspense>
         <div className="lg:pl-60">
-          <main className="app-main mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6 lg:pt-10">{children}</main>
+          <main className="app-main mx-auto max-w-5xl px-4 pb-32 pt-8 sm:px-6 lg:pt-10">{children}</main>
         </div>
+        <Suspense fallback={null}>
+          <Assistant />
+        </Suspense>
         <RunningPanel />
         <Toaster />
       </body>

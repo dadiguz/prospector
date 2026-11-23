@@ -17,6 +17,7 @@ import { syncReplies } from "@/lib/gmail/sync";
 import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
 import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
+import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string> } | null;
@@ -599,4 +600,38 @@ export async function removeDraftVariables(projectId: number, messageIds?: numbe
   });
   refresh();
   return { ok: true, message: `${rows.length} borrador(es) sin variables. Revisa que se lean bien.` };
+}
+
+/* ---------- Asistente ---------- */
+
+/** Aplica las propuestas del asistente que el usuario aprobó. Cada una se vuelve a validar. */
+export async function applyAssistant(projectId: number, propuestas: Propuesta[]): Promise<FormState> {
+  const ps = z.array(z.object({ tipo: z.string() }).passthrough()).max(300).parse(propuestas) as unknown as Propuesta[];
+  const partes: string[] = [];
+  const e = applyEdits(projectId, ps);
+  if (e.borradores) partes.push(`${e.borradores} borrador(es) editado(s)`);
+  if (e.plantillas) partes.push(`${e.plantillas} plantilla(s) actualizada(s)`);
+  const errores: string[] = [];
+  for (const p of ps) {
+    if (p.tipo === "crear_borradores") {
+      const r = await createDraftsBulk(p.prospectIds, p.sinVariables);
+      if (r?.creados) partes.push(`${r.creados} borrador(es) creado(s)`);
+      if (r?.error) errores.push(r.error);
+    } else if (p.tipo === "descartar_borradores") {
+      let n = 0;
+      for (const id of p.ids) {
+        if (!get("SELECT 1 FROM messages m JOIN prospects p ON p.id = m.prospect_id WHERE m.id = ? AND p.project_id = ? AND m.estado IN ('borrador','aprobado')", id, projectId)) continue;
+        await discardDraft(id);
+        n++;
+      }
+      if (n) partes.push(`${n} borrador(es) descartado(s)`);
+    } else if (p.tipo === "etiquetar" && p.prospectIds.length) {
+      const r = await tagProspects(projectId, p.prospectIds, p.etiqueta);
+      if (r?.ok) partes.push(`etiqueta “${p.etiqueta}” en ${p.prospectIds.length}`);
+    }
+  }
+  audit("asistente", "aplicar", JSON.stringify(ps.map((p) => p.tipo)));
+  refresh();
+  if (!partes.length) return { error: errores.join(" ") || "No se aplicó nada: los elementos cambiaron. Vuelve a pedirlo." };
+  return { ok: true, message: `Listo: ${partes.join(", ")}.`, error: errores.length ? errores.join(" ") : undefined };
 }

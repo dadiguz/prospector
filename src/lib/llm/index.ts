@@ -308,3 +308,75 @@ export async function write(opts: { tier: Tier; system: string; prompt: string; 
   if (res.stop_reason === "refusal") throw new Error("El modelo no quiso redactar esto.");
   return res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
 }
+
+/** Herramienta propia (del lado de la app) para `converse`. */
+export type AppTool = {
+  name: string;
+  description: string;
+  input_schema: Anthropic.Tool.InputSchema;
+  run: (input: unknown) => Promise<string> | string;
+  /** Texto corto para el aviso en vivo ("Leyendo borradores"). */
+  aviso?: (input: unknown) => string;
+};
+
+/**
+ * Conversación con herramientas de la app (asistente). Bucle manual: el modelo pide una herramienta,
+ * la app la corre y le devuelve el resultado, hasta que responde con texto.
+ */
+export async function converse(opts: {
+  tier: Tier;
+  system: string;
+  messages: Anthropic.MessageParam[];
+  tools: AppTool[];
+  paso: string;
+  maxVueltas?: number;
+  onActivity?: (texto: string) => void;
+}): Promise<{ text: string; consumo: Consumo }> {
+  const c = await client();
+  const model = modelFor(opts.tier);
+  const messages = [...opts.messages];
+  const total: Consumo = { costoUsd: 0, tokensEntrada: 0, tokensSalida: 0, busquedasWeb: 0 };
+  const byName = new Map(opts.tools.map((t) => [t.name, t]));
+  let text = "";
+  for (let i = 0; i < (opts.maxVueltas ?? 10); i++) {
+    const t0 = Date.now();
+    let res: Anthropic.Message;
+    try {
+      res = await c.messages
+        .stream({
+          model,
+          max_tokens: 32000,
+          system: opts.system,
+          output_config: { effort: "medium" },
+          tools: opts.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
+          messages,
+        })
+        .finalMessage();
+    } catch (e) {
+      toPaused(e);
+    }
+    const u = logUsage(opts.paso, res.model ?? model, res.usage as UsageLike, Date.now() - t0);
+    total.costoUsd += u.costoUsd;
+    total.tokensEntrada += u.tokensEntrada;
+    total.tokensSalida += u.tokensSalida;
+    text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+    if (res.stop_reason === "refusal") throw new Error("El modelo no quiso hacer esto.");
+    if (res.stop_reason === "max_tokens") throw new Error("La respuesta quedó cortada. Pide algo más acotado (menos borradores a la vez).");
+    if (res.stop_reason !== "tool_use") break;
+    messages.push({ role: "assistant", content: res.content });
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const b of res.content) {
+      if (b.type !== "tool_use") continue;
+      const tool = byName.get(b.name);
+      if (tool?.aviso) opts.onActivity?.(tool.aviso(b.input));
+      try {
+        const out = tool ? await tool.run(b.input) : `Herramienta desconocida: ${b.name}`;
+        results.push({ type: "tool_result", tool_use_id: b.id, content: out });
+      } catch (e) {
+        results.push({ type: "tool_result", tool_use_id: b.id, content: `Error: ${e instanceof Error ? e.message : String(e)}`, is_error: true });
+      }
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return { text, consumo: total };
+}
