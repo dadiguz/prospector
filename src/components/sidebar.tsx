@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { SidebarProject } from "@/lib/queries";
+import { SeedLogo } from "./logo";
 import { ChevronDown, House, Inbox, LayoutGrid, Menu, Plus, Search, Settings, SlidersHorizontal, SquarePen, Users, Check } from "lucide-react";
 
 /* Iconos de línea al estilo de los símbolos del sistema. */
@@ -101,7 +102,8 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
 
   const contenido = (
     <div className="flex h-full flex-col gap-6 px-3 py-5">
-      <Link href="/" onClick={cerrar} className="px-3 font-serif text-2xl tracking-tight text-ink">
+      <Link href="/" onClick={cerrar} className="flex items-center gap-2.5 px-3 font-serif text-2xl tracking-tight text-ink">
+        <SeedLogo size={26} />
         Prospector
       </Link>
 
@@ -180,7 +182,7 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
         <button type="button" className="btn btn-quiet btn-icon" aria-label="Abrir menú" onClick={() => setOpen(true)}>
           {ICON.menu}
         </button>
-        <Link href="/" className="font-serif text-xl tracking-tight">Prospector</Link>
+        <Link href="/" className="flex items-center gap-2 font-serif text-xl tracking-tight"><SeedLogo size={22} />Prospector</Link>
         {actual && <span className="truncate text-sm text-ink-2">· {actual.nombre}</span>}
       </div>
       {open && (
