@@ -8,6 +8,7 @@ import { ProfileSchema, readProfile, readSettings, writeProfile, writeSettings, 
 import { deleteSecret, setSecret } from "@/lib/secrets";
 import { validateApiKey, write as llmWrite, NoApiKeyError } from "@/lib/llm";
 import { buildDraft, contactBlocker, validatorContext, stripMissing } from "@/lib/drafts";
+import { ARREGLOS_AUTO, aplicarArreglos } from "@/lib/fixes";
 import { blocks, validateEmail } from "@/lib/validator";
 import { recordReplyEvent } from "@/lib/replies";
 import { domainOf } from "@/lib/text";
@@ -600,6 +601,32 @@ export async function removeDraftVariables(projectId: number, messageIds?: numbe
   });
   refresh();
   return { ok: true, message: `${rows.length} borrador(es) sin variables. Revisa que se lean bien.` };
+}
+
+/** Arreglos automáticos elegidos en el apartado "Problemas" de Borradores. Cada borrador se vuelve a validar. */
+export async function fixDrafts(projectId: number, arreglos: { regla: string; ids: number[] }[]): Promise<FormState> {
+  const lista = z.array(z.object({ regla: z.enum(Object.keys(ARREGLOS_AUTO) as [string, ...string[]]), ids: z.array(z.number().int()).max(500) })).max(20).parse(arreglos);
+  const porId = new Map<number, string[]>();
+  for (const a of lista) for (const id of a.ids) porId.set(id, [...(porId.get(id) ?? []), a.regla]);
+  if (!porId.size) return { ok: true, message: "Nada que arreglar." };
+  let n = 0;
+  tx(() => {
+    for (const [id, reglas] of porId) {
+      const r = get<{ asunto: string; cuerpo: string; nombre: string; ficha_json: string }>(
+        `SELECT m.asunto, m.cuerpo, o.nombre, p.ficha_json FROM messages m JOIN prospects p ON p.id = m.prospect_id
+         JOIN organizations o ON o.id = p.organization_id WHERE m.id = ? AND p.project_id = ? AND m.estado IN ('borrador','aprobado')`,
+        id, projectId);
+      if (!r) continue;
+      const s = aplicarArreglos(r.asunto, r.cuerpo, reglas, r.nombre);
+      if (s.asunto === r.asunto && s.cuerpo === r.cuerpo) continue;
+      const issues = validateEmail(s.asunto, s.cuerpo, validatorContext(projectId, json(r.ficha_json, {})));
+      run("UPDATE messages SET asunto = ?, cuerpo = ?, validacion_json = ?, estado = 'borrador' WHERE id = ?", s.asunto, s.cuerpo, JSON.stringify(issues), id);
+      n++;
+    }
+  });
+  audit(readProfile()?.correo ?? "owner", "borradores_arreglados", `${n} borradores: ${lista.map((a) => a.regla).join(", ")}`);
+  refresh();
+  return { ok: true, message: n ? `${n} borrador(es) arreglado(s).` : "No hubo cambios." };
 }
 
 /* ---------- Asistente ---------- */

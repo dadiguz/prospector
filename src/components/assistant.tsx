@@ -57,10 +57,19 @@ export function Assistant() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensajes.length, actividad]);
 
+  // Otras pantallas (p. ej. "Problemas" en Borradores) le pasan una petición ya escrita.
+  const enviarRef = useRef<(q: string) => void>(() => {});
+  useEffect(() => {
+    const onPedir = (e: Event) => enviarRef.current((e as CustomEvent<string>).detail);
+    window.addEventListener("asistente:pedir", onPedir);
+    return () => window.removeEventListener("asistente:pedir", onPedir);
+  }, []);
+
   if (!ctx) return null;
   const { slug, seccion } = ctx;
   const setMensajes = (fn: (m: Mensaje[]) => Mensaje[]) => setHilos((h) => ({ ...h, [slug]: fn(h[slug] ?? []) }));
 
+  enviarRef.current = (q) => void enviar(q);
   async function enviar(pregunta: string) {
     const q = pregunta.trim();
     if (!q || pensando) return;

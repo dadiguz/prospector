@@ -64,14 +64,21 @@ export function stripMissing(asunto: string, cuerpo: string, nombreProspecto?: s
       quitadas.push(p.trim());
       return "";
     }
-    const frases = p.split(/(?<=[.!?])\s+/);
-    return frases
-      .filter((f) => {
-        if (!VAR.test(f)) return true;
-        quitadas.push(f.trim());
-        return false;
-      })
-      .join(" ");
+    // Línea por línea, para no llevarse un saludo que está justo arriba de la frase con variable.
+    return p
+      .split("\n")
+      .map((l) =>
+        l
+          .split(/(?<=[.!?])\s+/)
+          .filter((f) => {
+            if (!VAR.test(f)) return true;
+            quitadas.push(f.trim());
+            return false;
+          })
+          .join(" "),
+      )
+      .filter((l) => l.trim())
+      .join("\n");
   });
   let a = asunto.replace(/\s*\b(de|del|para|en|con)\s+\{[a-z_]+\}/gi, "").replace(/\{[a-z_]+\}/g, "").replace(/\s{2,}/g, " ").trim();
   a = a.replace(/\b(de|del|para|en|con)\s*$/i, "").trim();

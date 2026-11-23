@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { discardDraft, markSent, removeDraftVariables, pushDraftsToGmail, sendTestToMe, sendViaGmail, updateDraft, type FormState } from "@/app/actions";
+import { discardDraft, fixDrafts, markSent, pushDraftsToGmail, sendTestToMe, sendViaGmail, updateDraft, type FormState } from "@/app/actions";
 import { ActionButton, CopyButton, FormMessage, StatefulForm } from "@/components/client";
 import type { Issue } from "@/lib/validator";
 import { Info } from "@/components/info";
+import { ARREGLOS_AUTO } from "@/lib/fix-labels";
 
 type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[]; nuevo?: boolean };
 
@@ -17,7 +18,6 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
   const [pending, start] = useTransition();
   const chosen = drafts.filter((d) => sel.includes(d.id));
   const restantes = Math.max(0, props.tope - props.enviadosHoy);
-  const conVariables = drafts.filter(tieneVariables).length;
   const run = (fn: () => Promise<FormState>, clearOnOk = true) =>
     start(async () => {
       const r = await fn();
@@ -33,11 +33,6 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
           <Info label="Envíos de hoy">Hoy llevas {props.enviadosHoy} de {props.tope} envíos (tope diario, en Ajustes). Un borrador está listo si tiene destinatario y no tiene errores.</Info>
         </span>
         <div className="flex flex-wrap gap-2">
-          {conVariables > 0 && (
-            <ActionButton action={() => removeDraftVariables(props.projectId)} className="btn btn-quiet" pendingLabel="Quitando…">
-              Quitar variables ({conVariables})
-            </ActionButton>
-          )}
           <button type="button" className="btn btn-quiet" onClick={() => setSel(sel.length ? [] : listos.map((d) => d.id).slice(0, restantes))}>
             {sel.length ? "Quitar selección" : "Elegir los listos"}
           </button>
@@ -46,6 +41,8 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
           </button>
         </div>
       </div>
+
+      <Problems projectId={props.projectId} drafts={drafts} />
 
       {confirming && (
         <div className="card mb-6 border-accent p-5" role="dialog" aria-label="Confirmar envío">
@@ -90,16 +87,15 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
 
       <ul className="space-y-4">
         {drafts.map((d) => (
-          <DraftCard key={d.id} d={d} projectId={props.projectId} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
+          <DraftCard key={d.id} d={d} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
         ))}
       </ul>
     </>
   );
 }
 
-const tieneVariables = (d: Draft) => /\{[a-z_]+\}/.test(d.asunto + d.cuerpo);
 
-function DraftCard({ d, gmail, selected, onToggle, projectId }: { d: Draft; gmail: boolean; selected: boolean; onToggle: () => void; projectId: number }) {
+function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean; selected: boolean; onToggle: () => void }) {
   const [editing, setEditing] = useState(false);
   const errors = d.issues.filter((i) => i.nivel === "error");
   const warns = d.issues.filter((i) => i.nivel === "aviso");
@@ -142,14 +138,7 @@ function DraftCard({ d, gmail, selected, onToggle, projectId }: { d: Draft; gmai
       {errors.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm">
           {errors.map((i, k) => (
-            <li key={`e${k}`} className="flex flex-wrap items-center gap-2 text-bad">
-              <span>✕ {i.regla}: {i.detalle}</span>
-              {i.regla === "Variables sin llenar" && (
-                <ActionButton action={() => removeDraftVariables(projectId, [d.id])} className="btn btn-quiet py-0.5 text-xs" pendingLabel="Quitando…">
-                  Quitar variables
-                </ActionButton>
-              )}
-            </li>
+            <li key={`e${k}`} className="text-bad">✕ {i.regla}: {i.detalle}</li>
           ))}
         </ul>
       )}
@@ -181,5 +170,88 @@ function DraftCard({ d, gmail, selected, onToggle, projectId }: { d: Draft; gmai
         <ActionButton action={() => discardDraft(d.id)} className="btn btn-quiet" confirm="¿Descartar este borrador?">Descartar</ActionButton>
       </div>
     </li>
+  );
+}
+
+type Grupo = { regla: string; nivel: "error" | "aviso"; drafts: Draft[]; detalle: string };
+const ASISTENTE = "asistente";
+const DEJAR = "dejar";
+
+/** Apartado "Problemas": un renglón por regla con la acción que eliges, y un solo botón para aplicar todo. */
+function Problems({ projectId, drafts }: { projectId: number; drafts: Draft[] }) {
+  const grupos: Grupo[] = [];
+  for (const d of drafts)
+    for (const i of d.issues) {
+      let g = grupos.find((x) => x.regla === i.regla);
+      if (!g) grupos.push((g = { regla: i.regla, nivel: i.nivel, drafts: [], detalle: i.detalle }));
+      if (i.nivel === "error") g.nivel = "error";
+      if (!g.drafts.includes(d)) g.drafts.push(d);
+    }
+  grupos.sort((a, b) => (a.nivel === b.nivel ? b.drafts.length - a.drafts.length : a.nivel === "error" ? -1 : 1));
+  const [eleccion, setEleccion] = useState<Record<string, string>>({});
+  const [state, setState] = useState<FormState>(null);
+  const [pending, start] = useTransition();
+  if (!grupos.length) return null;
+  const accion = (g: Grupo) => eleccion[g.regla] ?? (ARREGLOS_AUTO[g.regla] ? "auto" : ASISTENTE);
+  const conAccion = grupos.filter((g) => accion(g) !== DEJAR);
+  const afectados = new Set(grupos.flatMap((g) => g.drafts.map((d) => d.id))).size;
+
+  const aplicar = () =>
+    start(async () => {
+      setState(null);
+      const auto = conAccion.filter((g) => accion(g) === "auto").map((g) => ({ regla: g.regla, ids: g.drafts.map((d) => d.id) }));
+      const ia = conAccion.filter((g) => accion(g) === ASISTENTE);
+      if (auto.length) setState(await fixDrafts(projectId, auto));
+      if (ia.length)
+        window.dispatchEvent(
+          new CustomEvent("asistente:pedir", {
+            detail:
+              "Arregla estos problemas de los borradores con la mejor propuesta, sin tocar lo demás:\n" +
+              ia.map((g) => `- ${g.regla} (${g.drafts.map((d) => `${d.nombre} #${d.id}`).join(", ")})`).join("\n"),
+          }),
+        );
+    });
+
+  return (
+    <section className="card mb-6 px-5 py-4" aria-label="Problemas">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-medium">Problemas en {afectados} borrador(es)</h2>
+        <Info label="Cómo se arreglan">
+          Elige qué hacer con cada problema y pulsa Arreglar. Los arreglos automáticos se aplican al momento. Los del asistente llegan como propuesta para que la revises antes de aplicarla. Los avisos no impiden mandar; los errores sí.
+        </Info>
+      </div>
+      <ul className="mt-3 divide-y divide-line">
+        {grupos.map((g) => (
+          <li key={g.regla} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={g.nivel === "error" ? "text-bad" : "text-warn"} aria-hidden>{g.nivel === "error" ? "✕" : "!"}</span>
+              <span>{g.regla}</span>
+              <span className="text-xs text-ink-3">{g.drafts.length === 1 ? g.drafts[0].nombre : `${g.drafts.length} borradores`}</span>
+              <Info label={`Detalle: ${g.regla}`}>
+                <span className="block">{g.detalle}</span>
+                {g.drafts.length > 1 && <span className="mt-1 block text-ink-3">{g.drafts.map((d) => d.nombre).join(", ")}</span>}
+              </Info>
+            </span>
+            <select
+              className="select text-sm"
+              style={{ width: "17rem" }}
+              aria-label={`Acción para ${g.regla}`}
+              value={accion(g)}
+              onChange={(e) => setEleccion((x) => ({ ...x, [g.regla]: e.target.value }))}
+            >
+              {ARREGLOS_AUTO[g.regla] && <option value="auto">{ARREGLOS_AUTO[g.regla]}</option>}
+              <option value={ASISTENTE}>Que lo arregle el asistente</option>
+              <option value={DEJAR}>{g.nivel === "error" ? "Lo arreglo yo" : "Dejarlo así"}</option>
+            </select>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+        <FormMessage state={state} />
+        <button type="button" className="btn btn-primary" disabled={pending || !conAccion.length} onClick={aplicar}>
+          {pending ? "Arreglando…" : `Arreglar ${conAccion.length === grupos.length ? "todo" : conAccion.length}`}
+        </button>
+      </div>
+    </section>
   );
 }
