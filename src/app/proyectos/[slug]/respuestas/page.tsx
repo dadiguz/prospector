@@ -33,7 +33,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
     <>
       <SeenTracker projectId={project.id} seccion="respuestas" />
       <div className="flex items-start justify-between gap-4">
-        <PageTitle sub="Lo que contestaron, con una respuesta sugerida.">Respuestas</PageTitle>
+        <PageTitle>Respuestas</PageTitle>
         <div className="pt-3"><TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} /></div>
       </div>
       {nuevas > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevas} nueva(s)</p>}
@@ -96,7 +96,6 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
       </Section>
 
       <Fold title="Registrar una respuesta a mano" open={!gmail.conectado && replies.length === 0}>
-        <p className="mb-3 text-sm text-ink-2">{gmail.conectado ? "Para lo que contestaron por teléfono o WhatsApp." : "Sin Gmail conectado, anota aquí lo que conteste cada prospecto."}</p>
         <ReplyForm options={sinRespuesta.map((s) => ({ id: s.message_id, label: `${s.nombre}${s.para ? ` · ${s.para}` : ""}` }))} />
       </Fold>
 

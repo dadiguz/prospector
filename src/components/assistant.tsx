@@ -247,7 +247,7 @@ function Propuestas({ propuestas, aplicado, onAplicado, projectId }: { propuesta
       </ul>
       {!aplicado && (
         <div className="flex items-center justify-end gap-2 border-t border-line px-3 py-2">
-          <span className="mr-auto text-[11px] text-ink-3">Nada se envía: solo cambia borradores, plantillas o etiquetas.</span>
+          <span className="mr-auto" />
           <button type="button" onClick={aplicar} disabled={pending || !sel.length} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white" style={{ opacity: pending || !sel.length ? 0.4 : 1 }}>
             {pending ? "Aplicando…" : `Aplicar ${sel.length}`}
           </button>

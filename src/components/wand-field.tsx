@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Info } from "./info";
 import { improveField } from "@/app/actions";
 import type { Campo } from "@/lib/wand";
 
@@ -75,7 +76,7 @@ export function Field({ label, hint, value, onChange, campo, contexto = "", rows
   const style = campo ? { paddingRight: "2.25rem" } : undefined;
   return (
     <label className="block">
-      <span className="label">{label}</span>
+      <span className="label flex items-center gap-1.5">{label}{hint && <Info label={`Sobre ${label}`}>{hint}</Info>}</span>
       <span className="relative block">
         {rows ? (
           <textarea className={cls} style={style} rows={rows} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
@@ -84,7 +85,6 @@ export function Field({ label, hint, value, onChange, campo, contexto = "", rows
         )}
         {campo && <Wand campo={campo} etiqueta={label} value={value} contexto={contexto} onApply={onChange} />}
       </span>
-      {hint && <span className="mt-1 block text-xs text-ink-3">{hint}</span>}
     </label>
   );
 }

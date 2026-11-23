@@ -170,11 +170,7 @@ export function ReplyDetailButton({ replyId, slug }: { replyId: number; slug: st
                     part.startsWith("[REVISAR]") ? <mark key={i} className="suposicion mt-2 block">{part}</mark> : <span key={i}>{part}</span>,
                   )}
                 </p>
-              ) : (
-                <p className="text-sm text-ink-2">
-                  Redacta una respuesta corta, en el tono del prospecto, que solo afirma lo que está en la ficha de verdad. Se copia y se manda desde Gmail.
-                </p>
-              )}
+              ) : null}
             </section>
           </div>
         )}

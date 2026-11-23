@@ -34,9 +34,6 @@ async function AjustesContent({ searchParams }: PageProps<"/ajustes">) {
       <Section title="API key de Claude" aside={key ? <Badge tone="ok">Conectada</Badge> : <Badge>Sin conectar</Badge>}>
         {key && <p className="mb-3 font-mono text-sm text-ink-2">{mask(key)}</p>}
         <ApiKeyForm hasKey={Boolean(key)} />
-        <p className="mt-3 text-xs text-ink-3">
-          Se guarda en el llavero del sistema. Nunca en archivos del proyecto, en la base ni en los registros. Cada compañero usa su propia llave.
-        </p>
       </Section>
 
       <Section
@@ -79,7 +76,6 @@ async function AjustesContent({ searchParams }: PageProps<"/ajustes">) {
                 <li>Pégalos aquí, guarda y pulsa “Conectar con Google”.</li>
               </ol>
               <GmailClientForm />
-              <p className="mt-3 text-xs text-ink-3">Se guardan en el llavero del sistema junto con el token de acceso. Cada compañero conecta su propio Gmail.</p>
             </Fold>
           </>
         )}

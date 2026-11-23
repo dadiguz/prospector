@@ -8,7 +8,7 @@ async function NuevoContent() {
   await io();
   return (
     <>
-      <PageTitle sub="Llena lo que sepas; la varita te ayuda a redactar o mejorar cada campo. Puedes volver a editarlo cuando quieras.">Nuevo proyecto</PageTitle>
+      <PageTitle>Nuevo proyecto</PageTitle>
       <ProjectEditor initial={emptyDoc()} existingSlug={null} />
     </>
   );

@@ -9,7 +9,7 @@ async function BienvenidaContent() {
   const profile = readProfile();
   return (
     <div className="max-w-xl">
-      <PageTitle sub="Tus datos se guardan solo en esta computadora, en tu carpeta de usuario. De ahí salen el remitente, la firma y tu número en los mensajes.">
+      <PageTitle>
         Bienvenido a Prospector
       </PageTitle>
       <ProfileForm profile={profile} from="bienvenida" />

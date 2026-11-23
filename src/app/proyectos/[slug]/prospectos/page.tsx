@@ -83,7 +83,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <SeenTracker projectId={project.id} seccion="prospectos" />
-      <PageTitle sub="Los más prometedores primero. Abre uno para ver los detalles.">Prospectos</PageTitle>
+      <PageTitle>Prospectos</PageTitle>
       {nuevos > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevos} nuevo(s)</p>}
       <div className="mb-5 flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-line pb-3">
         {LISTAS.map((l) => {

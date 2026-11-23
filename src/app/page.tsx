@@ -16,7 +16,7 @@ async function HomeContent() {
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageTitle sub="Tus proyectos de prospección.">Hola, {profile.nombre.split(" ")[0]}</PageTitle>
+        <PageTitle>Hola, {profile.nombre.split(" ")[0]}</PageTitle>
         <Link href="/proyectos/nuevo" className="btn btn-primary">Nuevo proyecto</Link>
       </div>
       {projects.length === 0 ? (
@@ -57,7 +57,6 @@ async function HomeContent() {
         <div id="importar" className="mt-12 scroll-mt-6">
           <Fold title="Importar un proyecto (.md)">
             <ImportProjectForm />
-            <p className="mt-2 text-xs text-ink-3">Si ya existe, se actualiza su configuración y se conservan sus prospectos y mensajes.</p>
           </Fold>
         </div>
       )}

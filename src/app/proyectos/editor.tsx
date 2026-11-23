@@ -4,6 +4,7 @@ import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { saveProject } from "@/app/actions";
 import { Field } from "@/components/wand-field";
+import { Info } from "@/components/info";
 import type { ProjectDoc, Fact } from "@/lib/project-md";
 import type { Campo } from "@/lib/wand";
 import { hookFigure, mxn } from "@/lib/hook-formula";
@@ -13,10 +14,7 @@ function Card({ n, title, hint, children }: { n: number; title: string; hint?: s
     <section className="card p-6">
       <div className="mb-5 flex items-baseline gap-3">
         <span className="font-serif text-2xl text-ink-3">{n}</span>
-        <div>
-          <h2 className="font-medium">{title}</h2>
-          {hint && <p className="text-sm text-ink-2">{hint}</p>}
-        </div>
+        <h2 className="flex items-center gap-2 font-medium">{title}{hint && <Info label={`Sobre ${title}`}>{hint}</Info>}</h2>
       </div>
       <div className="space-y-4">{children}</div>
     </section>
@@ -72,7 +70,7 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
 
   return (
     <div className="space-y-6 pb-28">
-      <Card n={1} title="Lo básico" hint="Qué vendes y para qué es esta prospección.">
+      <Card n={1} title="Lo básico">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Nombre del proyecto" value={d.nombre} onChange={(v) => set("nombre", v)} campo="nombre" contexto={base} placeholder="Ej. Sistema de reservas" />
           <Field label="Empresa" value={d.empresa} onChange={(v) => set("empresa", v)} placeholder="Tu empresa y ciudad" />
@@ -189,7 +187,7 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
         <AddButton onClick={() => set("descalificadores", [...d.descalificadores, { regla: "", tipo: "duro", origen: "" }])}>Agregar regla</AddButton>
       </Card>
 
-      <Card n={6} title="Segmentos" hint="A quién buscar. Cada segmento tiene su botón de búsqueda en el proyecto.">
+      <Card n={6} title="Segmentos">
         {d.segmentos.map((s, i) => {
           const upd = (patch: Partial<typeof s>) => set("segmentos", d.segmentos.map((x, j) => (j === i ? { ...x, ...patch } : x)));
           const ctx = `${base}${perfil}\nSegmento: ${s.nombre}\n${s.definicion}`;
@@ -244,7 +242,7 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
         />
       </Card>
 
-      <Card n={8} title="Investigación y territorio" hint="Qué buscar de cada prospecto y dónde.">
+      <Card n={8} title="Investigación y territorio">
         <Field label="Instrucciones de investigación" rows={4} value={d.investigacion} onChange={(v) => set("investigacion", v)} campo="investigacion" contexto={base + perfil} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Estados excluidos" value={csv(d.territorio.excluidos)} onChange={(v) => set("territorio", { ...d.territorio, excluidos: fromCsv(v) })} placeholder="separados por coma" />
@@ -263,7 +261,7 @@ export function ProjectEditor({ initial, existingSlug }: { initial: ProjectDoc; 
 
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <span className="text-sm">{msg?.error ? <span className="text-bad">{msg.error}</span> : <span className="text-ink-2">La varita propone; nada cambia hasta que tú guardas.</span>}</span>
+          <span className="text-sm text-bad">{msg?.error}</span>
           <div className="flex gap-2">
             <button type="button" className="btn btn-quiet" onClick={() => router.back()}>Cancelar</button>
             <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Guardando…" : existingSlug ? "Guardar cambios" : "Crear proyecto"}</button>

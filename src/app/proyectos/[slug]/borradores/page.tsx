@@ -29,7 +29,7 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
     <>
       <SeenTracker projectId={project.id} seccion="borradores" />
       <div className="flex items-start justify-between gap-4">
-        <PageTitle sub="Revisa y manda. Nada sale sin tu aprobación.">Borradores</PageTitle>
+        <PageTitle>Borradores</PageTitle>
         <div className="pt-3"><TagFilter tags={tags} active={tagId} hrefFor={(id) => (id ? `?tag=${id}` : "?")} /></div>
       </div>
       {drafts.length === 0 ? (

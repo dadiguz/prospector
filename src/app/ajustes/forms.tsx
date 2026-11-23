@@ -1,6 +1,7 @@
 "use client";
 
 import { removeApiKey, saveApiKey, saveSettings, saveGmailClient } from "@/app/actions";
+import { Info } from "@/components/info";
 import { ActionButton, FormMessage, StatefulForm } from "@/components/client";
 import type { Settings } from "@/lib/profile";
 
@@ -50,16 +51,14 @@ export function SettingsForm({ settings }: { settings: Settings }) {
               <input id="busquedasWebPorCandidato" name="busquedasWebPorCandidato" type="number" min={1} max={10} className="input" defaultValue={settings.busquedasWebPorCandidato} />
             </div>
             <div>
-              <label className="label" htmlFor="busquedasSimultaneas">Búsquedas a la vez</label>
+              <label className="label flex items-center gap-1.5" htmlFor="busquedasSimultaneas">Búsquedas a la vez <Info>Las demás esperan en cola.</Info></label>
               <input id="busquedasSimultaneas" name="busquedasSimultaneas" type="number" min={1} max={5} className="input" defaultValue={settings.busquedasSimultaneas} />
-              <span className="mt-1 block text-xs text-ink-3">Las demás esperan en cola. Más a la vez = más límites de la API.</span>
             </div>
           </div>
           <label className="flex items-start gap-3 text-sm">
             <input type="checkbox" name="modoEconomico" defaultChecked={settings.modoEconomico} className="mt-1 accent-[var(--accent)]" />
             <span>
-              Modo económico
-              <span className="block text-xs text-ink-2">Baja un nivel de modelo en cada tarea y hace menos búsquedas por candidato. Las fichas salen menos completas.</span>
+              Modo económico <Info>Modelos más baratos y menos búsquedas; las fichas salen menos completas.</Info>
             </span>
           </label>
           <p className="text-xs text-ink-3">

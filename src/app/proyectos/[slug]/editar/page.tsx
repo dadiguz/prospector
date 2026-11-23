@@ -11,7 +11,7 @@ async function EditarContent({ params }: PageProps<"/proyectos/[slug]/editar">) 
   if (!project) notFound();
   return (
     <>
-      <PageTitle sub="Los cambios aplican a las búsquedas y borradores nuevos. Prospectos, mensajes y respuestas se conservan.">Editar proyecto</PageTitle>
+      <PageTitle>Editar proyecto</PageTitle>
       <ProjectEditor initial={readProject(project.id)} existingSlug={project.slug} />
     </>
   );
