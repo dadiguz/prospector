@@ -19,6 +19,7 @@ import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type
 import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
 import { applyEdits, type Propuesta } from "@/lib/assistant";
+import { generarBrochure } from "@/lib/brochure";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string> } | null;
@@ -299,6 +300,15 @@ Escribe solo el cuerpo de la respuesta.`,
   }
 }
 
+/** A los cuántos días sin respuesta toca dar seguimiento (ajuste global). */
+export async function setFollowupDays(dias: number): Promise<FormState> {
+  const n = z.number().int().min(1).max(60).safeParse(dias);
+  if (!n.success) return { error: "Escribe un número de días entre 1 y 60." };
+  writeSettings({ ...readSettings(), diasSeguimiento: n.data });
+  refresh();
+  return { ok: true, message: `Seguimiento a los ${n.data} días.` };
+}
+
 /** Propone un seguimiento para un correo enviado que no tuvo respuesta. */
 export async function suggestFollowup(messageId: number, indicacion?: string): Promise<FormState> {
   const ind = Indicacion.safeParse(indicacion);
@@ -327,6 +337,20 @@ Escribe solo el cuerpo del seguimiento.`,
     return { ok: true };
   } catch (e) {
     return { error: e instanceof NoApiKeyError ? e.message : `No se pudo redactar: ${(e as Error).message}` };
+  }
+}
+
+/** Brochure para quien respondió: lee su sitio, redacta y exporta PDF + imágenes. Tarda alrededor de un minuto. */
+export async function makeBrochure(replyId: number, indicacion?: string): Promise<FormState> {
+  const ind = Indicacion.safeParse(indicacion);
+  if (!ind.success) return { error: "La indicación es demasiado larga." };
+  requireProfile();
+  try {
+    await generarBrochure(replyId, ind.data || undefined);
+    refresh();
+    return { ok: true, message: "Brochure listo." };
+  } catch (e) {
+    return { error: e instanceof NoApiKeyError ? e.message : `No se pudo generar: ${(e as Error).message}` };
   }
 }
 

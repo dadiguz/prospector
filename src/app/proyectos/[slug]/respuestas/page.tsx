@@ -8,6 +8,10 @@ import { Info } from "@/components/info";
 import { projectTags } from "@/lib/tags";
 import { ReplyForm, SyncButton, ReviewReply } from "./client";
 import { AgentReply } from "./agent";
+import { BrochureButton, BrochurePanel } from "./brochure";
+import { FollowupDays } from "./followup";
+import { readSettings } from "@/lib/profile";
+import { brochureListo } from "@/lib/brochure";
 import { ReplyDetailButton } from "./detail";
 import { lastSeen, esNuevo } from "@/lib/vistas";
 import { SeenTracker } from "@/components/seen-tracker";
@@ -16,6 +20,7 @@ import { gmailStatus } from "@/lib/gmail/oauth";
 const ORDER = ["interesado", "acuse", "otro", "no_ahora", "no", "baja", "rebote", "auto_respuesta", "vacia"];
 const VISTAS = [
   { key: "con", label: "Con respuesta" },
+  { key: "seguir", label: "Dar seguimiento" },
   { key: "sin", label: "Sin respuesta" },
   { key: "rebotes", label: "Rebotaron" },
 ] as const;
@@ -50,7 +55,24 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   const filtro = FILTROS.some((f) => f.key === sp.filtro) ? (sp.filtro as string) : "todas";
   const clases = FILTROS.find((f) => f.key === filtro)!.clases;
   const visibles = filtro === "todas" ? conRespuesta : conRespuesta.filter((r) => clases.includes(r.clasificacion));
-  const conteo: Record<Vista, number> = { con: conRespuesta.length, sin: sinRespuesta.length, rebotes: rebotes.length };
+  const diasSeg = readSettings().diasSeguimiento;
+  const toca = sinRespuesta.filter((s) => s.dias >= diasSeg);
+  const conteo: Record<Vista, number> = { con: conRespuesta.length, seguir: toca.length, sin: sinRespuesta.length, rebotes: rebotes.length };
+  const itemSin = (s: (typeof sinRespuesta)[number]) => (
+    <li key={s.message_id} className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{s.nombre}</span>
+            {vista === "sin" && s.dias >= diasSeg && <Badge tone="warn">Toca seguimiento</Badge>}
+          </div>
+          <p className="mt-1 text-xs text-ink-3">{[s.para, s.tanda, `hace ${s.dias} día${s.dias === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</p>
+        </div>
+        {!s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={null} />}
+      </div>
+      {s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={s.seguimiento} />}
+    </li>
+  );
   const qs = (cambio: Record<string, string | null>) => {
     const p = new URLSearchParams();
     const base: Record<string, string | null> = { vista: vista === "con" ? null : vista, filtro: filtro === "todas" ? null : filtro, tag: tagId ? String(tagId) : null, ...cambio };
@@ -105,6 +127,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
               {visibles.map((r) => {
                 const l = CLASIF_LABEL[r.clasificacion] ?? CLASIF_LABEL.otro;
                 const nueva = esNuevo(r.creado_en, desde);
+                const bro = brochureListo(r.prospect_id);
                 return (
                   <li key={r.id} className={`card p-5 ${nueva ? "border-accent bg-accent-soft/20" : ""}`}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -121,10 +144,12 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
                       <div className="flex flex-wrap items-center gap-2">
                         <ReplyDetailButton replyId={r.id} slug={project.slug} />
                         {!r.sugerencia && <AgentReply tipo="respuesta" id={r.id} sugerencia={null} />}
+                        <BrochureButton replyId={r.id} estado={bro} />
                       </div>
                     </div>
                     {!r.revisado_por_humano && <div className="mt-3"><ReviewReply replyId={r.id} actual={r.clasificacion} /></div>}
                     {r.sugerencia && <AgentReply tipo="respuesta" id={r.id} sugerencia={r.sugerencia} />}
+                    <BrochurePanel replyId={r.id} prospectId={r.prospect_id} estado={bro} />
                   </li>
                 );
               })}
@@ -133,24 +158,30 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
         </>
       )}
 
+      {vista === "seguir" && (
+        <>
+          <div className="card mb-4 p-5">
+            <h3 className="font-medium">Cómo dar seguimiento</h3>
+            <ul className="mt-2 space-y-1 text-sm text-ink-2">
+              <li>· Escríbeles en el mismo hilo del correo, no en uno nuevo.</li>
+              <li>· Corto: tres a cinco líneas, con algo nuevo y una pregunta fácil de contestar.</li>
+              <li>· Sin reclamar que no contestaron. Máximo dos seguimientos; después, se deja.</li>
+            </ul>
+            <div className="mt-4"><FollowupDays dias={diasSeg} /></div>
+          </div>
+          {toca.length === 0 ? (
+            <Empty>Nadie lleva {diasSeg} días o más sin responder.</Empty>
+          ) : (
+            <ul className="space-y-3">{toca.map(itemSin)}</ul>
+          )}
+        </>
+      )}
+
       {vista === "sin" && (
         sinRespuesta.length === 0 ? (
           <Empty>Todos los correos enviados tienen respuesta.</Empty>
         ) : (
-          <ul className="space-y-3">
-            {sinRespuesta.map((s) => (
-              <li key={s.message_id} className="card p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="font-medium">{s.nombre}</span>
-                    <p className="mt-1 text-xs text-ink-3">{[s.para, s.tanda, `hace ${s.dias} día${s.dias === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</p>
-                  </div>
-                  {!s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={null} />}
-                </div>
-                {s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={s.seguimiento} />}
-              </li>
-            ))}
-          </ul>
+          <ul className="space-y-3">{sinRespuesta.map(itemSin)}</ul>
         )
       )}
 

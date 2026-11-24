@@ -33,6 +33,7 @@ export const SettingsSchema = z.object({
   busquedasWebPorCandidato: z.number().int().min(1).max(10).default(4),
   modoEconomico: z.boolean().default(false),
   busquedasSimultaneas: z.number().int().min(1).max(5).default(3),
+  diasSeguimiento: z.number().int().min(1).max(60).default(7),
   modelos: z
     .object({
       alto: z.string().default("claude-opus-5-5"),
