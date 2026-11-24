@@ -382,4 +382,11 @@ ALTER TABLE reply_events ADD COLUMN creado_en TEXT;
 UPDATE reply_events SET creado_en = COALESCE(fecha || ' 12:00:00', datetime('now'));
 `,
   },
+  {
+    id: 7,
+    name: "seguimiento_sugerido",
+    sql: /* sql */ `
+ALTER TABLE messages ADD COLUMN seguimiento TEXT;
+`,
+  },
 ];

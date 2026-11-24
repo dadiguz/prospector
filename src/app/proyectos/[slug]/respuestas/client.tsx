@@ -1,15 +1,7 @@
 "use client";
 
-import { confirmReply, recordReply, suggestReply, syncInbox } from "@/app/actions";
+import { confirmReply, recordReply, syncInbox } from "@/app/actions";
 import { ActionButton, FormMessage, StatefulForm } from "@/components/client";
-
-export function SuggestButton({ replyId }: { replyId: number }) {
-  return (
-    <ActionButton action={() => suggestReply(replyId)} className="btn" pendingLabel="Redactando…">
-      Sugerir respuesta
-    </ActionButton>
-  );
-}
 
 const CLASIFICACIONES = [
   ["interesado", "Interesado"],
