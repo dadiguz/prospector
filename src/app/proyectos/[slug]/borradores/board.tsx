@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { discardDraft, fixDrafts, markSent, pushDraftsToGmail, sendTestToMe, sendViaGmail, updateDraft, type FormState } from "@/app/actions";
+import { discardDraft, fixDrafts, markSent, pushDraftsToGmail, sendTestToMe, updateDraft, type FormState } from "@/app/actions";
 import { ActionButton, CopyButton, FormMessage, StatefulForm } from "@/components/client";
 import type { Issue } from "@/lib/validator";
 import { Info } from "@/components/info";
+import { SendingModal } from "./sending";
 import { ARREGLOS_AUTO } from "@/lib/fix-labels";
 import { CircleX, TriangleAlert } from "lucide-react";
 
@@ -15,6 +16,8 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
   const listos = drafts.filter((d) => !d.issues.some((i) => i.nivel === "error") && d.para);
   const [sel, setSel] = useState<number[]>([]);
   const [confirming, setConfirming] = useState(false);
+  // Correos que se están enviando (el modal guarda su propia lista: la pantalla se refresca mientras tanto).
+  const [enviando, setEnviando] = useState<{ id: number; nombre: string; para: string | null }[] | null>(null);
   const [state, setState] = useState<FormState>(null);
   const [pending, start] = useTransition();
   const chosen = drafts.filter((d) => sel.includes(d.id));
@@ -67,8 +70,8 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {props.gmailConectado ? (
               <>
-                <button type="button" className="btn btn-primary" disabled={pending} onClick={() => run(() => sendViaGmail(props.projectId, chosen.map((d) => d.id)))}>
-                  {pending ? "Enviando…" : `Mandar ${chosen.length} ahora`}
+                <button type="button" className="btn btn-primary" disabled={pending} onClick={() => setEnviando(chosen.map((d) => ({ id: d.id, nombre: d.nombre, para: d.para })))}>
+                  {`Mandar ${chosen.length} ahora`}
                 </button>
                 <button type="button" className="btn" disabled={pending} onClick={() => run(() => pushDraftsToGmail(props.projectId, chosen.map((d) => d.id)), false)}>
                   Solo dejarlos como borradores en Gmail
@@ -85,6 +88,18 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
         </div>
       )}
       {!confirming && <div className="mb-4"><FormMessage state={state} /></div>}
+      {enviando && (
+        <SendingModal
+          projectId={props.projectId}
+          items={enviando}
+          onClose={(n) => {
+            setEnviando(null);
+            setConfirming(false);
+            setSel([]);
+            setState(n ? { ok: true, message: `${n} enviado(s).` } : null);
+          }}
+        />
+      )}
 
       <ul className="space-y-4">
         {drafts.map((d) => (

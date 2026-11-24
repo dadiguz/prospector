@@ -200,6 +200,25 @@ a:focus-visible {
   }
 }
 
+/* Correo que vuela de izquierda a derecha mientras se envía */
+.mail-fly {
+  animation: mail-fly 1.3s ease-in-out infinite;
+}
+@keyframes mail-fly {
+  0% {
+    transform: translateX(-70px) rotate(-6deg);
+    opacity: 0;
+  }
+  20%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(70px) rotate(4deg);
+    opacity: 0;
+  }
+}
+
 summary {
   cursor: pointer;
   list-style: none;

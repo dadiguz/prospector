@@ -368,7 +368,12 @@ export async function pushDraftsToGmail(projectId: number, messageIds: number[])
  * Envío por Gmail con aprobación explícita (sección 6.4). Solo se llama desde el botón de confirmación,
  * con la lista que el usuario vio. Ninguna tarea en segundo plano llama esta función.
  */
-export async function sendViaGmail(projectId: number, messageIds: number[]): Promise<FormState> {
+/**
+ * Envía por Gmail. La pantalla manda uno por uno para mostrar el avance; `verificar` revisa
+ * solo el primero de la tanda (redirecciones y firma), como antes.
+ */
+export async function sendViaGmail(projectId: number, messageIds: number[], opts: { verificar?: boolean } = {}): Promise<FormState> {
+  const verificar = opts.verificar ?? true;
   const profile = requireProfile();
   const check = checkBatch(projectId, messageIds);
   if ("error" in check) return { error: check.error };
@@ -391,7 +396,7 @@ export async function sendViaGmail(projectId: number, messageIds: number[]): Pro
       run("UPDATE prospects SET estado = 'enviado', actualizado_en = datetime('now') WHERE id = ?", r.prospect_id);
       audit(from, "correo_enviado", `${r.para} · ${r.asunto}`);
       enviados.push(r.para);
-      if (enviados.length === 1) {
+      if (enviados.length === 1 && verificar) {
         const v = await gmailApi.verifySent(s.messageId, firma);
         verificacion = v.ok ? "El primero salió limpio: sin redirecciones y con firma." : `Revisa el primero: ${v.problemas.join("; ")}.`;
         run("UPDATE messages SET verificacion = ? WHERE id = ?", verificacion, r.id);
