@@ -149,8 +149,8 @@ export async function listReplies(projectId: number, tag: number | null = null) 
             r.revisado_por_humano, r.confianza, r.creado_en
      FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
      WHERE p.project_id = ? AND ${tagFilterSql("p.id")} ORDER BY r.fecha DESC, r.id DESC`, projectId, tag, tag);
-  const sinRespuesta = all<{ message_id: number; nombre: string; tanda: string | null; para: string | null; seguimiento: string | null; dias: number }>(
-    `SELECT m.id message_id, o.nombre, m.tanda, m.para, m.seguimiento, CAST(julianday('now') - julianday(m.enviado_en) AS INTEGER) dias
+  const sinRespuesta = all<{ message_id: number; nombre: string; tanda: string | null; para: string | null; seguimiento: string | null; canal: string; dias: number }>(
+    `SELECT m.id message_id, o.nombre, m.tanda, m.para, m.seguimiento, m.canal, CAST(julianday('now') - julianday(m.enviado_en) AS INTEGER) dias
      FROM messages m JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
      WHERE p.project_id = ? AND m.estado = 'enviado' AND m.direccion = 'salida'
        AND NOT EXISTS (SELECT 1 FROM reply_events r WHERE r.message_id = m.id) AND ${tagFilterSql("p.id")}

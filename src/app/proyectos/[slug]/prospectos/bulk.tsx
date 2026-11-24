@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { createDraftsBulk, tagProspects, type FormState } from "@/app/actions";
 import { Info } from "@/components/info";
+import { toast } from "@/components/toaster";
 
 /** Casilla de una fila. No abre la ficha al marcarla. */
 export function RowCheckbox({ id }: { id: number }) {
@@ -27,7 +27,11 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
   const [count, setCount] = useState(0);
   const [tagName, setTagName] = useState("");
   const [sinVariables, setSinVariables] = useState(true);
-  const [state, setState] = useState<(FormState & { creados?: number }) | null>(null);
+  // Resultados y avisos van a toasts que se pueden cerrar.
+  const setState = (r: (FormState & { creados?: number }) | null) => {
+    if (r?.message) toast(r.message, "ok", r.creados ? { href: `/proyectos/${slug}/borradores${tagId ? `?tag=${tagId}` : ""}`, label: "Ir a borradores" } : undefined);
+    if (r?.error) toast(r.error, "error");
+  };
   const [pending, start] = useTransition();
 
   const recount = () => setCount(checks().filter((c) => c.checked).length);
@@ -90,19 +94,6 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
           <button type="button" className="btn btn-primary" disabled={pending} onClick={() => start(async () => setState(await createDraftsBulk(selected(), sinVariables)))}>
             {pending ? "Trabajando…" : `Crear ${count} borrador(es)`}
           </button>
-        </div>
-      )}
-      {state && (state.message || state.error) && (
-        <div className="w-full space-y-1 pb-1 pl-2">
-          {state.message && (
-            <p className="text-ok">
-              {state.message}{" "}
-              {state.creados ? (
-                <Link href={`/proyectos/${slug}/borradores${tagId ? `?tag=${tagId}` : ""}`} className="underline underline-offset-4">Ir a borradores</Link>
-              ) : null}
-            </p>
-          )}
-          {state.error && <p className="text-xs text-bad">{state.error}</p>}
         </div>
       )}
     </form>

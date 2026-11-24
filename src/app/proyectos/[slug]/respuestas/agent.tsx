@@ -10,7 +10,7 @@ import { toast } from "@/components/toaster";
  * Agente que propone una respuesta (o un seguimiento) y la rehace con lo que le pidas.
  * Solo redacta: copiar y mandar sigue siendo cosa tuya.
  */
-export function AgentReply({ tipo, id, sugerencia }: { tipo: "respuesta" | "seguimiento"; id: number; sugerencia: string | null }) {
+export function AgentReply({ tipo, id, sugerencia, waPhone }: { tipo: "respuesta" | "seguimiento"; id: number; sugerencia: string | null; waPhone?: string | null }) {
   const [pending, start] = useTransition();
   const [indicacion, setIndicacion] = useState("");
 
@@ -38,7 +38,14 @@ export function AgentReply({ tipo, id, sugerencia }: { tipo: "respuesta" | "segu
           <Sparkles size={13} className="text-accent" />
           {tipo === "respuesta" ? "Respuesta propuesta" : "Seguimiento propuesto"}
         </span>
-        <CopyButton text={limpio} className="btn btn-sm" />
+        <span className="flex gap-2">
+          {waPhone && (
+            <a className="btn btn-sm" href={`https://wa.me/${waPhone}?text=${encodeURIComponent(limpio)}`} target="_blank" rel="noreferrer noopener">
+              Abrir WhatsApp
+            </a>
+          )}
+          <CopyButton text={limpio} className="btn btn-sm" />
+        </span>
       </div>
       <div className="whitespace-pre-wrap text-sm leading-relaxed">
         {sugerencia.split(/(\[REVISAR\][\s\S]*)/).map((part, i) =>

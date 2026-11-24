@@ -103,6 +103,27 @@ export async function createDraft(prospectId: number, sinVariables = true): Prom
   return { ok: true, message: "Borrador creado." };
 }
 
+/** Registra que el usuario ya mandó el WhatsApp desde su teléfono (la app no envía WhatsApp). */
+export async function markWhatsappSent(prospectId: number, texto: string, telefono: string): Promise<FormState> {
+  const profile = requireProfile();
+  const tel = z.string().regex(/^\d{10,13}$/).safeParse(telefono);
+  if (!tel.success) return { error: "Teléfono no válido." };
+  const p = get<{ estado: string }>("SELECT estado FROM prospects WHERE id = ?", prospectId);
+  if (!p) return { error: "Prospecto no encontrado." };
+  const tanda = `WhatsApp ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`;
+  tx(() => {
+    run(
+      `INSERT INTO messages (prospect_id, canal, direccion, para, asunto, cuerpo, cuerpo_original, estado, enviado_en, aprobado_por, tanda)
+       VALUES (?, 'whatsapp', 'salida', ?, 'WhatsApp', ?, ?, 'enviado', datetime('now','localtime'), ?, ?)`,
+      prospectId, tel.data, texto.slice(0, 4000), texto.slice(0, 4000), profile.correo, tanda,
+    );
+    run("UPDATE prospects SET estado = 'enviado', actualizado_en = datetime('now') WHERE id = ?", prospectId);
+  });
+  audit(profile.correo, "whatsapp_registrado", `${tel.data}`);
+  refresh();
+  return { ok: true, message: "Registrado como enviado por WhatsApp." };
+}
+
 export async function discardProspect(prospectId: number, motivo: string) {
   run("UPDATE prospects SET lista = 'descartado', estado = 'descartado', motivo_descarte = ?, actualizado_en = datetime('now') WHERE id = ?", motivo || "Descartado a mano", prospectId);
   run("UPDATE messages SET estado = 'descartado' WHERE prospect_id = ? AND estado IN ('borrador','aprobado')", prospectId);
@@ -313,22 +334,24 @@ export async function setFollowupDays(dias: number): Promise<FormState> {
 export async function suggestFollowup(messageId: number, indicacion?: string): Promise<FormState> {
   const ind = Indicacion.safeParse(indicacion);
   if (!ind.success) return { error: "La indicación es demasiado larga." };
-  const m = get<{ project_id: number; nombre: string; asunto: string; cuerpo: string; seguimiento: string | null; dias: number }>(
-    `SELECT p.project_id, o.nombre, m.asunto, m.cuerpo, m.seguimiento, CAST(julianday('now') - julianday(m.enviado_en) AS INTEGER) dias
+  const m = get<{ project_id: number; nombre: string; asunto: string; cuerpo: string; seguimiento: string | null; dias: number; canal: string }>(
+    `SELECT p.project_id, o.nombre, m.asunto, m.cuerpo, m.seguimiento, m.canal, CAST(julianday('now') - julianday(m.enviado_en) AS INTEGER) dias
      FROM messages m JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
      WHERE m.id = ? AND m.estado = 'enviado' AND m.direccion = 'salida'`, messageId);
   if (!m) return { error: "Correo no encontrado." };
   try {
     const text = await redactar({
       paso: "seguimiento",
-      system: systemRespuesta(m.project_id, "Redactas un seguimiento corto a un correo comercial que no tuvo respuesta. Tres a cinco líneas, en el mismo hilo; no repitas el correo original ni culpes al prospecto por no contestar; aporta un ángulo nuevo o una pregunta fácil de responder."),
+      system: m.canal === "whatsapp"
+        ? systemRespuesta(m.project_id, "Redactas un seguimiento por WhatsApp a un mensaje comercial que no tuvo respuesta. Dos o tres líneas, cálido y natural como un mensaje de WhatsApp; sin asunto ni \"Saludos cordiales\"; no repitas el mensaje original ni culpes al prospecto por no contestar; termina con una pregunta fácil de responder.").replace(/; cierra con "Saludos cordiales,"[^;.]*/, "")
+        : systemRespuesta(m.project_id, "Redactas un seguimiento corto a un correo comercial que no tuvo respuesta. Tres a cinco líneas, en el mismo hilo; no repitas el correo original ni culpes al prospecto por no contestar; aporta un ángulo nuevo o una pregunta fácil de responder."),
       prompt: `Prospecto: ${m.nombre}
 Días desde el envío: ${m.dias}
 
-Nuestro correo original (asunto: ${m.asunto}):
+${m.canal === "whatsapp" ? "Nuestro WhatsApp original" : `Nuestro correo original (asunto: ${m.asunto})`}:
 ${m.cuerpo || "(cuerpo no conservado en el historial)"}
 
-Escribe solo el cuerpo del seguimiento.`,
+Escribe solo el texto del seguimiento.`,
       previa: m.seguimiento,
       indicacion: ind.data || undefined,
     });

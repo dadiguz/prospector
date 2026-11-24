@@ -256,6 +256,8 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
                       canDiscard={["investigado", "en_espera", "borrador"].includes(r.estado)}
                       waHref={phone && waText ? waLink(phone, waText) : null}
                       waText={phone ? waText : null}
+                      waPhone={phone}
+                      canMarkWa={["investigado", "en_espera", "borrador"].includes(r.estado)}
                     />
                   </div>
                 </details>

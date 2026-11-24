@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProject, listReplies } from "@/lib/queries";
 import { responseAnalysis } from "@/lib/analysis";
-import { PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL, TagFilter } from "@/components/ui";
+import { WhatsAppIcon, PageTitle, Section, Fold, Badge, Stat, Empty, CLASIF_LABEL, TagFilter } from "@/components/ui";
 import { Info } from "@/components/info";
 import { projectTags } from "@/lib/tags";
 import { ReplyForm, SyncButton, ReviewReply } from "./client";
@@ -64,13 +64,14 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{s.nombre}</span>
+            {s.canal === "whatsapp" && <span className="inline-flex items-center gap-1 text-xs text-ink-2"><WhatsAppIcon size={13} /> WhatsApp</span>}
             {vista === "sin" && s.dias >= diasSeg && <Badge tone="warn">Toca seguimiento</Badge>}
           </div>
-          <p className="mt-1 text-xs text-ink-3">{[s.para, s.tanda, `hace ${s.dias} día${s.dias === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</p>
+          <p className="mt-1 text-xs text-ink-3">{[s.canal === "whatsapp" && s.para ? s.para.replace(/^52(\d{3})(\d{3})(\d{4})$/, "$1 $2 $3") : s.para, s.tanda, `hace ${s.dias} día${s.dias === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</p>
         </div>
         {!s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={null} />}
       </div>
-      {s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={s.seguimiento} />}
+      {s.seguimiento && <AgentReply tipo="seguimiento" id={s.message_id} sugerencia={s.seguimiento} waPhone={s.canal === "whatsapp" ? s.para : null} />}
     </li>
   );
   const qs = (cambio: Record<string, string | null>) => {

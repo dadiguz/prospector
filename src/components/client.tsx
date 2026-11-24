@@ -20,7 +20,6 @@ export function ActionButton({
   pendingLabel?: string;
 }) {
   const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<FormState | null>(null);
   return (
     <span className="inline-flex flex-col items-start gap-1">
       <button
@@ -31,17 +30,14 @@ export function ActionButton({
           if (confirm && !window.confirm(confirm)) return;
           start(async () => {
             const r = (await action()) ?? null;
-            // Lo que sale bien va a un aviso; los errores además quedan junto al botón.
+            // Todo va a un aviso que se puede cerrar.
             if (r?.message) toast(r.message);
             if (r?.error) toast(r.error, "error");
-            setMsg(r?.error ? r : null);
           });
         }}
       >
         {pending ? pendingLabel : children}
       </button>
-      {msg?.error && <span className="max-w-md text-xs text-bad">{msg.error}</span>}
-      {msg?.message && <span className="text-xs text-ok">{msg.message}</span>}
     </span>
   );
 }

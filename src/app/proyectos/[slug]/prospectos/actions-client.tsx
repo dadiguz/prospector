@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createDraft, discardProspect, postponeProspect } from "@/app/actions";
+import { createDraft, discardProspect, markWhatsappSent, postponeProspect } from "@/app/actions";
 import { ActionButton, CopyButton } from "@/components/client";
 
 export function ProspectActions({
@@ -10,13 +10,18 @@ export function ProspectActions({
   canDiscard,
   waHref,
   waText,
+  waPhone,
+  canMarkWa,
 }: {
   prospectId: number;
   canDraft: boolean;
   canDiscard: boolean;
   waHref: string | null;
   waText: string | null;
+  waPhone?: string | null;
+  canMarkWa?: boolean;
 }) {
+  const [abrio, setAbrio] = useState(false);
   const [fecha, setFecha] = useState("");
   const [motivo, setMotivo] = useState("");
   const [abierto, setAbierto] = useState<"tarde" | "descartar" | null>(null);
@@ -30,8 +35,13 @@ export function ProspectActions({
         )}
         {waHref && (
           <>
-            <a href={waHref} target="_blank" rel="noreferrer noopener" className="btn">Abrir WhatsApp</a>
+            <a href={waHref} target="_blank" rel="noreferrer noopener" className="btn" onClick={() => setAbrio(true)}>Abrir WhatsApp</a>
             {waText && <CopyButton text={waText} label="Copiar mensaje" />}
+            {canMarkWa && waText && waPhone && (
+              <ActionButton action={() => markWhatsappSent(prospectId, waText, waPhone)} className={abrio ? "btn btn-primary" : "btn"} pendingLabel="Guardando…">
+                Ya lo mandé
+              </ActionButton>
+            )}
           </>
         )}
         {canDiscard && (
