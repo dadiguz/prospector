@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProject, listProspects, scoreLines } from "@/lib/queries";
@@ -132,7 +132,8 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
           {todos || lista === "descartado" ? "No hay prospectos en esta lista." : "Nada por revisar aquí. Busca prospectos desde Resumen."}
         </Empty>
       ) : (
-        <>
+        // Al cambiar de lista o filtro se vuelve a montar: la selección y los avisos empiezan de cero.
+        <Fragment key={`${lista}|${tagId ?? ""}|${canal ?? ""}|${todos ? 1 : 0}`}>
         <BulkBar projectId={project.id} slug={project.slug} tagId={tagId} total={rows.length} />
         <ul className="card divide-y divide-line">
           {rows.map((r) => {
@@ -262,7 +263,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
             );
           })}
         </ul>
-        </>
+        </Fragment>
       )}
     </>
   );
