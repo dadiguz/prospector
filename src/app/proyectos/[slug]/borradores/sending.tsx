@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Mail, X } from "lucide-react";
+import { Check, Mail, TriangleAlert, X } from "lucide-react";
 import { sendViaGmail } from "@/app/actions";
 
 type Item = { id: number; nombre: string; para: string | null };
@@ -10,10 +10,13 @@ type Estado = "pendiente" | "enviando" | "enviado" | "error" | "omitido";
 /**
  * Envío con avance: manda los correos uno por uno y muestra cuál va saliendo.
  * Cubre la pantalla para que no se haga otra cosa mientras tanto; se puede detener después del actual.
+ * Si uno falla (hilo previo, supresión…) se salta y sigue; al final dice por qué no salió cada uno.
+ * Solo se detiene la tanda cuando el problema es de todos (tope diario, Gmail desconectado o con límite).
  */
 export function SendingModal({ projectId, items, onClose, send = sendViaGmail }: { projectId: number; items: Item[]; onClose: (enviados: number) => void; send?: typeof sendViaGmail }) {
   const [estados, setEstados] = useState<Record<number, Estado>>({});
-  const [error, setError] = useState<string | null>(null);
+  const [motivos, setMotivos] = useState<Record<number, string>>({});
+  const [paro, setParo] = useState<string | null>(null);
   const [nota, setNota] = useState<string | null>(null);
   const [termino, setTermino] = useState(false);
   const detener = useRef(false);
@@ -33,9 +36,17 @@ export function SendingModal({ projectId, items, onClose, send = sendViaGmail }:
         setEstados((e) => ({ ...e, [it.id]: "enviando" }));
         const r = await send(projectId, [it.id], { verificar: n === 0 }).catch((e: Error) => ({ error: e.message }) as const);
         if (r && "error" in r && r.error) {
+          // El servidor antepone el nombre; aquí ya va en la lista.
+          const motivo = r.error.startsWith(`${it.nombre}: `) ? r.error.slice(it.nombre.length + 2) : r.error;
+          if ("detener" in r && r.detener) {
+            // Problema de toda la tanda: este y los que siguen quedan sin enviar.
+            setEstados((e) => ({ ...e, [it.id]: "omitido" }));
+            setParo(motivo);
+            detener.current = true;
+            continue;
+          }
           setEstados((e) => ({ ...e, [it.id]: "error" }));
-          setError(`${it.nombre}: ${r.error}`);
-          detener.current = true;
+          setMotivos((m) => ({ ...m, [it.id]: motivo }));
           continue;
         }
         n++;
@@ -47,6 +58,8 @@ export function SendingModal({ projectId, items, onClose, send = sendViaGmail }:
   }, [items, projectId, send]);
 
   const enviados = items.filter((i) => estados[i.id] === "enviado").length;
+  const fallidos = items.filter((i) => estados[i.id] === "error");
+  const sinEnviar = items.filter((i) => estados[i.id] === "omitido").length;
   const actual = items.find((i) => estados[i.id] === "enviando");
   const pct = Math.round(((enviados + (actual ? 0.5 : 0)) / items.length) * 100);
 
@@ -66,18 +79,33 @@ export function SendingModal({ projectId, items, onClose, send = sendViaGmail }:
           </>
         ) : (
           <div className="mb-2 text-center">
-            <span className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full ${error ? "bg-bad-soft text-bad" : "bg-ok-soft text-ok"}`}>
-              {error ? <X size={24} strokeWidth={2} /> : <Check size={24} strokeWidth={2} />}
+            <span className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full ${paro ? "bg-bad-soft text-bad" : fallidos.length ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok"}`}>
+              {paro ? <X size={24} strokeWidth={2} /> : fallidos.length ? <TriangleAlert size={22} strokeWidth={2} /> : <Check size={24} strokeWidth={2} />}
             </span>
             <p className="font-medium">{enviados} de {items.length} enviado(s)</p>
-            {error && <p className="mt-1 text-sm text-bad">{error}</p>}
-            {nota && <p className="mt-1 text-sm text-ink-2">{nota}</p>}
+            {paro && <p className="mt-1 text-sm text-bad">Se detuvo: {paro}{sinEnviar ? ` Quedaron ${sinEnviar} sin enviar.` : ""}</p>}
+            {nota && enviados > 0 && <p className="mt-1 text-sm text-ink-2">{nota}</p>}
           </div>
         )}
 
         <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#f1efe8]">
           <div className="h-full rounded-full bg-accent transition-all duration-500" style={{ width: `${termino ? Math.round((enviados / items.length) * 100) : pct}%` }} />
         </div>
+
+        {termino && fallidos.length > 0 && (
+          <div className="mt-4 rounded-lg border border-line bg-bg px-3 py-2.5">
+            <p className="mb-1.5 text-xs font-medium text-ink-2">No se enviaron ({fallidos.length})</p>
+            <ul className="max-h-40 space-y-1.5 overflow-y-auto text-sm">
+              {fallidos.map((i) => (
+                <li key={i.id}>
+                  <span className="font-medium">{i.nombre}</span>
+                  <span className="block text-xs text-ink-2">{motivos[i.id]}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-ink-3">Siguen en Borradores para que los revises.</p>
+          </div>
+        )}
 
         <ul className="mt-4 max-h-48 space-y-1 overflow-y-auto text-sm">
           {items.map((i) => {

@@ -12,7 +12,7 @@ import { ARREGLOS_AUTO, aplicarArreglos } from "@/lib/fixes";
 import { blocks, validateEmail } from "@/lib/validator";
 import { recordReplyEvent } from "@/lib/replies";
 import { domainOf } from "@/lib/text";
-import { saveClient as saveGmailClientImpl, disconnect as gmailDisconnect } from "@/lib/gmail/oauth";
+import { saveClient as saveGmailClientImpl, disconnect as gmailDisconnect, GmailNotConnected } from "@/lib/gmail/oauth";
 import * as gmailApi from "@/lib/gmail/api";
 import { syncReplies } from "@/lib/gmail/sync";
 import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
@@ -22,7 +22,7 @@ import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { generarBrochure } from "@/lib/brochure";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
-export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string> } | null;
+export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string>; detener?: boolean } | null;
 
 function requireProfile() {
   const p = readProfile();
@@ -465,7 +465,8 @@ export async function sendViaGmail(projectId: number, messageIds: number[], opts
   const verificar = opts.verificar ?? true;
   const profile = requireProfile();
   const check = checkBatch(projectId, messageIds);
-  if ("error" in check) return { error: check.error };
+  // El tope diario detiene la tanda; lo demás (hilo previo, supresión, reglas) solo afecta a ese correo.
+  if ("error" in check) return { error: check.error, detener: check.error.startsWith("Tope diario") };
   const label = gmailLabel(projectId);
   const tanda = `Tanda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`;
   const enviados: string[] = [];
@@ -494,7 +495,10 @@ export async function sendViaGmail(projectId: number, messageIds: number[], opts
     }
   } catch (e) {
     refresh();
-    return { error: `${enviados.length ? `Se enviaron ${enviados.length}; luego falló: ` : ""}${(e as Error).message}` };
+    // Gmail desconectado, límite de Gmail, caída del servicio o sin red: no tiene caso seguir con los demás.
+    const st = e instanceof gmailApi.GmailError ? e.status : 0;
+    const detener = e instanceof GmailNotConnected || st === 429 || st === 401 || st >= 500 || /quota|rate ?limit|límite|fetch failed|network/i.test((e as Error).message);
+    return { error: `${enviados.length ? `Se enviaron ${enviados.length}; luego falló: ` : ""}${(e as Error).message}`, detener };
   }
   refresh();
   return { ok: true, message: `${enviados.length} enviado(s) desde ${await gmailApi.account()}. ${verificacion}` };
