@@ -163,7 +163,7 @@ export async function listReplies(projectId: number, tag: number | null = null) 
 
 export const scoreLines = (s: string) => json<ScoreLine[]>(s, []);
 
-export type SidebarProject = { slug: string; nombre: string; pendientes: number; borradores: number; respuestas: number; buscando: number };
+export type SidebarProject = { slug: string; nombre: string; icono: string | null; color: string | null; pendientes: number; borradores: number; respuestas: number; buscando: number };
 
 /** Proyectos con lo que necesita atención, para el menú lateral. */
 export async function sidebarProjects(): Promise<SidebarProject[]> {
@@ -171,7 +171,7 @@ export async function sidebarProjects(): Promise<SidebarProject[]> {
   // Contadores = lo nuevo desde la última visita a cada sección (tabla vistas).
   const visto = (sec: string) => `COALESCE((SELECT v.visto_en FROM vistas v WHERE v.project_id = p.id AND v.seccion = '${sec}'), p.creado_en)`;
   return all<SidebarProject>(`
-    SELECT p.slug, p.nombre,
+    SELECT p.slug, p.nombre, json_extract(p.config_json, '$.icono') icono, json_extract(p.config_json, '$.color') color,
       (SELECT COUNT(*) FROM prospects x WHERE x.project_id = p.id AND x.lista <> 'descartado' AND x.creado_en > ${visto("prospectos")}) pendientes,
       (SELECT COUNT(*) FROM messages m JOIN prospects x ON x.id = m.prospect_id
          WHERE x.project_id = p.id AND m.estado IN ('borrador','aprobado') AND m.creado_en > ${visto("borradores")}) borradores,

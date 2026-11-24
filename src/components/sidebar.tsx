@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { SidebarProject } from "@/lib/queries";
+import { ProjectIcon } from "@/lib/project-icons";
 import { AppLogo } from "./logo";
 import { ChevronDown, House, Inbox, LayoutGrid, Menu, Plus, Search, Settings, SlidersHorizontal, SquarePen, Users, Check } from "lucide-react";
 
@@ -117,7 +118,7 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
             className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm hover:border-line-strong"
           >
             {actual ? (
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft font-serif text-sm text-accent">{actual.nombre.slice(0, 1)}</span>
+              <ProjectIcon nombre={actual.nombre} icono={actual.icono} color={actual.color} size={24} />
             ) : (
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-dashed border-line-strong text-ink-3"><Plus size={14} strokeWidth={1.8} aria-hidden /></span>
             )}
@@ -133,7 +134,7 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
                   onClick={() => { setPicker(false); cerrar(); }}
                   className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-[#f3f1ea] ${p.slug === actual?.slug ? "font-medium" : ""}`}
                 >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent-soft font-serif text-xs text-accent">{p.nombre.slice(0, 1)}</span>
+                  <ProjectIcon nombre={p.nombre} icono={p.icono} color={p.color} size={20} />
                   <span className="flex-1 truncate">{p.nombre}</span>
                   {p.buscando > 0 && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" title="Buscando" />}
                   {p.slug === actual?.slug && <Check size={15} strokeWidth={2} className="text-accent" aria-hidden />}

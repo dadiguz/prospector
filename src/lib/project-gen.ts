@@ -3,6 +3,7 @@ import { extract } from "./llm";
 import { hookFigure } from "./hook-formula";
 import { PLANTILLA_PROYECTO, attrKey, type ProjectDoc } from "./project-md";
 import { readProfile } from "./profile";
+import { ICONOS_PROYECTO, CLAVES_ICONO, CLAVES_COLOR } from "./project-icons";
 
 /**
  * Arma un proyecto nuevo a partir de la idea que escribe el usuario.
@@ -27,6 +28,8 @@ const Basico = z.object({
   conversion: z.string().describe("Evento concreto que cuenta como cliente ganado"),
   meta_actual: z.string().describe("Meta de corto plazo, concreta"),
   investigacion: z.string().describe("Qué datos buscar de cada prospecto además de lo básico, y qué señales importan"),
+  icono: z.enum(CLAVES_ICONO).describe(`Ícono que mejor representa a quién se le vende: ${Object.entries(ICONOS_PROYECTO).map(([k, v]) => `${k} (${v.para})`).join("; ")}`),
+  color: z.enum(CLAVES_COLOR).describe("Color acorde al giro: salvia/oliva para salud y naturaleza, petroleo/azul para agua y tecnología, terracota/ocre para comida y eventos, ciruela/rosa para belleza y moda, pizarra para industria"),
 });
 
 const Ficha = z.object({

@@ -21,6 +21,8 @@ export type ProjectDoc = {
   investigacion: string;
   gmailEtiqueta: string;
   noInsistir: string[];
+  icono?: string | null;
+  color?: string | null;
   facts: Fact[];
   hook: { clave: string; nombre: string; formula: string; multiplicador: number; redondeo: number; frase: string; condicion: string; supuestos: string[] } | null;
   pesos: { clave: string; descripcion: string; peso: number }[];
@@ -253,7 +255,7 @@ export function readProject(projectId: number): ProjectDoc {
 function readProjectRaw(projectId: number): ProjectDoc {
   const p = get<{ slug: string; nombre: string; idea: string; propuesta_valor: string; voz: string; metrica_principal: string; conversion: string; meta_actual: string; config_json: string }>(
     "SELECT * FROM projects WHERE id = ?", projectId)!;
-  const cfg = json<{ empresa?: string; investigacion?: string; noInsistir?: string[]; gmail?: { etiqueta?: string } }>(p.config_json, {});
+  const cfg = json<{ empresa?: string; investigacion?: string; noInsistir?: string[]; gmail?: { etiqueta?: string }; icono?: string; color?: string }>(p.config_json, {});
   const h = get<{ clave: string; nombre: string; formula: string; multiplicador: number; redondeo: number; frase: string; condicion: string; supuestos_json: string }>(
     "SELECT * FROM hooks WHERE project_id = ? ORDER BY id LIMIT 1", projectId);
   const terr = get<{ excluidos_json: string; excepciones_json: string; motivo: string }>("SELECT * FROM territories WHERE project_id = ? ORDER BY id DESC LIMIT 1", projectId);
@@ -264,6 +266,8 @@ function readProjectRaw(projectId: number): ProjectDoc {
     metrica_principal: p.metrica_principal, conversion: p.conversion, meta_actual: p.meta_actual,
     empresa: cfg.empresa ?? "", investigacion: cfg.investigacion ?? "", noInsistir: cfg.noInsistir ?? [],
     gmailEtiqueta: cfg.gmail?.etiqueta ?? `Prospección/${p.nombre}`,
+    icono: cfg.icono ?? null,
+    color: cfg.color ?? null,
     facts: all<{ afirmacion: string; tipo: Fact["tipo"]; evidencia: string; terminos_json: string }>(
       "SELECT afirmacion, tipo, evidencia, terminos_json FROM product_facts WHERE project_id = ? ORDER BY id", projectId,
     ).map((f) => ({ afirmacion: f.afirmacion, tipo: f.tipo, evidencia: f.evidencia, terminos: json<string[]>(f.terminos_json, []) })),
@@ -291,7 +295,7 @@ export function importProject(d: ProjectDoc): { id: number; nuevo: boolean } {
   if (!d.pesos.length) throw new Error('Falta "## Perfil (pesos)".');
   return tx(() => {
     const prev = get<{ id: number; config_json: string }>("SELECT id, config_json FROM projects WHERE slug = ?", d.slug);
-    const cfg = { ...json<Record<string, unknown>>(prev?.config_json, {}), empresa: d.empresa, investigacion: d.investigacion, noInsistir: d.noInsistir, gmail: { etiqueta: d.gmailEtiqueta } };
+    const cfg = { ...json<Record<string, unknown>>(prev?.config_json, {}), empresa: d.empresa, investigacion: d.investigacion, noInsistir: d.noInsistir, gmail: { etiqueta: d.gmailEtiqueta }, ...(d.icono ? { icono: d.icono } : {}), ...(d.color ? { color: d.color } : {}) };
     let id: number;
     if (prev) {
       id = prev.id;
@@ -426,6 +430,8 @@ export const ProjectDocSchema = z.object({
   investigacion: str,
   gmailEtiqueta: str,
   noInsistir: z.array(str),
+  icono: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
   facts: z.array(z.object({ afirmacion: str, tipo: z.enum(["si_afirmar", "no_afirmar", "no_mencionar", "pendiente"]), evidencia: str, terminos: z.array(str) })),
   hook: z
     .object({ clave: str, nombre: str, formula: str, multiplicador: z.number(), redondeo: z.number(), frase: str, condicion: str, supuestos: z.array(str) })

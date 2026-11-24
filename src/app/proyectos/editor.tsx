@@ -1,5 +1,6 @@
 "use client";
 
+import { IconPicker } from "@/components/icon-picker";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { saveProject } from "@/app/actions";
@@ -127,7 +128,10 @@ export function ProjectEditor({ initial, existingSlug, title }: { initial: Proje
   return (
     <div className="space-y-8 pb-16">
       <div className="sticky top-0 z-20 -mx-4 -mt-2 flex flex-wrap items-center justify-between gap-3 bg-bg/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <h1 className="font-serif text-4xl leading-tight tracking-tight">{title}</h1>
+        <div className="flex items-center gap-3">
+          <IconPicker nombre={d.nombre} icono={d.icono} color={d.color} onChange={(v) => setD((x) => ({ ...x, ...v }))} />
+          <h1 className="font-serif text-4xl leading-tight tracking-tight">{title}</h1>
+        </div>
         <div className="flex items-center gap-2">
           {msg?.error && <span className="text-sm text-bad">{msg.error}</span>}
           <button type="button" className="btn btn-quiet" onClick={() => router.back()}>Cancelar</button>
