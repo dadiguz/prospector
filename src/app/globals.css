@@ -132,6 +132,20 @@ body {
 .input,
 .select {
   height: 2.25rem;
+  /* Una sola línea: la altura manda, sin relleno vertical que recorte el texto. */
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: normal;
+}
+.input-sm,
+.select-sm {
+  height: 2rem;
+  font-size: 0.85rem;
+}
+.select-sm {
+  padding-left: 0.7rem;
+  padding-right: 1.9rem;
+  background-position: right 0.5rem center;
 }
 .input::placeholder,
 .textarea::placeholder {

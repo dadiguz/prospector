@@ -77,8 +77,7 @@ export function BrochurePanel({ replyId, prospectId, estado }: { replyId: number
         }}
       >
         <input
-          className="input flex-1 text-sm"
-          style={{ height: "2rem" }}
+          className="input input-sm flex-1"
           placeholder="Pídele un cambio: otro título, usa la foto de la alberca, enfócate en eventos…"
           value={indicacion}
           maxLength={500}

@@ -28,8 +28,8 @@ export function FollowupDays({ dias }: { dias: number }) {
         type="number"
         min={1}
         max={60}
-        className="input text-center"
-        style={{ width: "4.5rem", height: "2rem" }}
+        className="input input-sm text-center"
+        style={{ width: "4.5rem" }}
         value={valor}
         onChange={(e) => setValor(e.target.value)}
         aria-label="Días sin respuesta"

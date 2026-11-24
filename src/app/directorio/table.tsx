@@ -180,8 +180,8 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
           <label className="flex items-center gap-2">
             Mostrar
             <select
-              className="select"
-              style={{ width: "auto", height: "2rem" }}
+              className="select select-sm"
+              style={{ width: "auto" }}
               value={porPagina}
               onChange={(e) => {
                 const n = Number(e.target.value);

@@ -73,7 +73,7 @@ export function BulkBar({ projectId, slug, tagId, total }: { projectId: number; 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {etiquetando ? (
             <>
-              <input className="input w-40 py-1.5" placeholder="Nombre de la etiqueta" value={tagName} onChange={(e) => setTagName(e.target.value)} autoFocus />
+              <input className="input input-sm w-40" placeholder="Nombre de la etiqueta" value={tagName} onChange={(e) => setTagName(e.target.value)} autoFocus />
               <button
                 type="button"
                 className="btn"

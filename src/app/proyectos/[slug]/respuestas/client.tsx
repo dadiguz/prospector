@@ -74,7 +74,8 @@ export function ReviewReply({ replyId, actual }: { replyId: number; actual: stri
     <span className="flex flex-wrap items-center gap-2 text-xs">
       <span className="text-warn">Clasificación automática:</span>
       <select
-        className="select w-auto py-1 text-xs"
+        className="select select-sm"
+        style={{ width: "auto" }}
         defaultValue={actual}
         onChange={(e) => void confirmReply(replyId, e.target.value)}
         aria-label="Corregir clasificación"

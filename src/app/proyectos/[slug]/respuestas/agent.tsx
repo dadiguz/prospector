@@ -60,8 +60,7 @@ export function AgentReply({ tipo, id, sugerencia, waPhone }: { tipo: "respuesta
         }}
       >
         <input
-          className="input flex-1 text-sm"
-          style={{ height: "2rem" }}
+          className="input input-sm flex-1"
           placeholder="Pídele un cambio: más corto, propón el jueves, menos formal…"
           value={indicacion}
           maxLength={500}
