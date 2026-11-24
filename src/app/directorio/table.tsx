@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { ChevronRight, Download, ExternalLink, Search, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Search, Star } from "lucide-react";
 import type { DirectorioFila } from "@/lib/queries";
 import { ProjectIcon } from "@/lib/project-icons";
 import { CopyButton } from "@/components/client";
@@ -14,6 +14,18 @@ const FILTROS: { key: Filtro; label: string }[] = [
   { key: "enviados", label: "Contactados" },
   { key: "sin_enviar", label: "Sin contactar" },
 ];
+
+const TAMANOS = [25, 50, 100, 200];
+const CLAVE_TAMANO = "directorio-por-pagina";
+const leerTamano = () => {
+  try {
+    const n = Number(localStorage.getItem(CLAVE_TAMANO));
+    return TAMANOS.includes(n) ? n : null;
+  } catch {
+    return null;
+  }
+};
+const sinSuscripcion = () => () => {};
 
 const corto = (s?: string, n = 140) => (s && s.length > n ? `${s.slice(0, n).replace(/\s+\S*$/, "")}…` : s ?? "");
 const industria = (f: DirectorioFila) => f.proyectos.find((p) => p.segmento)?.segmento ?? corto(f.ficha.tipo?.split(/[,;(]/)[0], 60) ?? "";
@@ -36,6 +48,11 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [proyecto, setProyecto] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
+  // El tamaño de página se recuerda en este navegador; 50 si no se ha elegido.
+  const guardado = useSyncExternalStore(sinSuscripcion, leerTamano, () => null);
+  const [elegido, setPorPagina] = useState<number | null>(null);
+  const porPagina = elegido ?? guardado ?? 50;
+  const [pagina, setPagina] = useState(0);
 
   const proyectos = useMemo(() => {
     const m = new Map<string, DirectorioFila["proyectos"][number]>();
@@ -55,6 +72,16 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
         .join(" ").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(t);
     });
   }, [filas, q, filtro, proyecto]);
+
+  const paginas = Math.max(1, Math.ceil(visibles.length / porPagina));
+  const actual = Math.min(pagina, paginas - 1);
+  const enPagina = visibles.slice(actual * porPagina, (actual + 1) * porPagina);
+  // Al cambiar búsqueda o filtros se vuelve a la primera página.
+  const [claveFiltros, setClaveFiltros] = useState(`${q}|${filtro}|${proyecto}`);
+  if (claveFiltros !== `${q}|${filtro}|${proyecto}`) {
+    setClaveFiltros(`${q}|${filtro}|${proyecto}`);
+    setPagina(0);
+  }
 
   const cuenta = (k: Filtro) =>
     filas.filter((f) => (k === "respondieron" ? f.respondio : k === "enviados" ? f.enviados : k === "sin_enviar" ? !f.enviados : true) && (!proyecto || f.proyectos.some((p) => p.slug === proyecto))).length;
@@ -98,7 +125,7 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
           <p className="px-4 py-10 text-center text-sm text-ink-3">Nada coincide con la búsqueda.</p>
         ) : (
           <ul className="divide-y divide-line">
-            {visibles.map((f) => {
+            {enPagina.map((f) => {
               const open = abierto === f.correo;
               return (
                 <li key={f.correo}>
@@ -133,6 +160,44 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
           </ul>
         )}
       </div>
+
+      {visibles.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
+          <label className="flex items-center gap-2">
+            Mostrar
+            <select
+              className="select"
+              style={{ width: "auto", height: "2rem" }}
+              value={porPagina}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setPorPagina(n);
+                setPagina(0);
+                try {
+                  localStorage.setItem(CLAVE_TAMANO, String(n));
+                } catch {
+                  /* sin almacenamiento */
+                }
+              }}
+              aria-label="Correos por página"
+            >
+              {TAMANOS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            por página
+          </label>
+          <div className="flex items-center gap-2">
+            <span>
+              {actual * porPagina + 1}–{Math.min((actual + 1) * porPagina, visibles.length)} de {visibles.length}
+            </span>
+            <button type="button" className="btn btn-sm btn-icon" disabled={actual === 0} onClick={() => setPagina(actual - 1)} aria-label="Página anterior">
+              <ChevronLeft size={15} />
+            </button>
+            <button type="button" className="btn btn-sm btn-icon" disabled={actual >= paginas - 1} onClick={() => setPagina(actual + 1)} aria-label="Página siguiente">
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
