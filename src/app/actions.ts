@@ -20,6 +20,7 @@ import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
 import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { generarBrochure } from "@/lib/brochure";
+import { leerHilo } from "@/lib/gmail/thread";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string>; detener?: boolean } | null;
@@ -328,6 +329,60 @@ export async function setFollowupDays(dias: number): Promise<FormState> {
   writeSettings({ ...readSettings(), diasSeguimiento: n.data });
   refresh();
   return { ok: true, message: `Seguimiento a los ${n.data} días.` };
+}
+
+/** Lee todo el hilo de Gmail de quien respondió y propone el siguiente mensaje. */
+export async function suggestThreadFollowup(replyId: number, indicacion?: string): Promise<FormState> {
+  const ind = Indicacion.safeParse(indicacion);
+  if (!ind.success) return { error: "La indicación es demasiado larga." };
+  const r = get<{ message_id: number; project_id: number; nombre: string; clasificacion: string; resumen: string; asunto: string; cuerpo: string; gmail_thread_id: string | null; seguimiento: string | null }>(
+    `SELECT m.id message_id, p.project_id, o.nombre, r.clasificacion, r.resumen, m.asunto, m.cuerpo, m.gmail_thread_id, m.seguimiento
+     FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
+     WHERE r.id = ?`, replyId);
+  if (!r) return { error: "Respuesta no encontrada." };
+  if (r.clasificacion === "rebote") return { error: "El correo rebotó; no hay a quién escribirle." };
+  let conversacion = "";
+  let ultimoNuestro = false;
+  let dias = 0;
+  if (r.gmail_thread_id) {
+    try {
+      const yo = await gmailApi.account();
+      const hilo = await leerHilo(r.gmail_thread_id, yo);
+      conversacion = hilo.slice(-12).map((m) => `[${m.fecha}] ${m.nuestro ? "NOSOTROS" : `ELLOS (${m.de})`}:\n${m.texto}`).join("\n\n");
+      ultimoNuestro = hilo.at(-1)?.nuestro ?? false;
+      const t = await gmailApi.getThreadMeta(r.gmail_thread_id);
+      const ult = Number(t.messages.at(-1)?.internalDate ?? Date.now());
+      dias = Math.floor((Date.now() - ult) / 86_400_000);
+    } catch (e) {
+      if (e instanceof GmailNotConnected) return { error: e.message };
+      return { error: `No se pudo leer el hilo: ${(e as Error).message}` };
+    }
+  }
+  if (!conversacion) conversacion = `[NOSOTROS]:\n${r.cuerpo}\n\n[ELLOS]: ${r.resumen}`;
+  const situacion = ultimoNuestro
+    ? `El último mensaje es nuestro y no han contestado (hace ${dias} día${dias === 1 ? "" : "s"}). Escribe un seguimiento corto que retome lo último que se habló, sin repetirlo ni reclamar, con una pregunta fácil.`
+    : `El último mensaje es de ellos (hace ${dias} día${dias === 1 ? "" : "s"}). Escribe la siguiente respuesta que avance la conversación hacia el siguiente paso.`;
+  try {
+    const text = await redactar({
+      paso: "seguimiento_hilo",
+      system: systemRespuesta(r.project_id, "Lees una conversación de correo con un prospecto y redactas el siguiente mensaje, en el mismo hilo. Breve, natural y coherente con todo lo que ya se dijo; no repitas lo que ya se explicó ni contradigas lo que se prometió."),
+      prompt: `Prospecto: ${r.nombre}
+Clasificación de su respuesta: ${r.clasificacion}. ${GUIA_CLASIF[r.clasificacion] ?? ""}
+
+Conversación (del más viejo al más reciente):
+${conversacion}
+
+${situacion}
+Escribe solo el cuerpo del mensaje.`,
+      previa: r.seguimiento,
+      indicacion: ind.data || undefined,
+    });
+    run("UPDATE messages SET seguimiento = ? WHERE id = ?", text, r.message_id);
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof NoApiKeyError ? e.message : `No se pudo redactar: ${(e as Error).message}` };
+  }
 }
 
 /** Propone un seguimiento para un correo enviado que no tuvo respuesta. */

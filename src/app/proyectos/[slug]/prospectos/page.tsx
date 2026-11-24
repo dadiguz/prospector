@@ -15,6 +15,8 @@ import { projectTags, tagsByProspect } from "@/lib/tags";
 import { lastSeen, esNuevo } from "@/lib/vistas";
 import { SeenTracker } from "@/components/seen-tracker";
 import { Info } from "@/components/info";
+import { SearchBox } from "@/components/search-box";
+import { coincide } from "@/lib/text";
 
 const LISTAS = [
   { key: "todos", label: "Todos" },
@@ -59,7 +61,14 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
     const { counts: c0 } = await listProspects(project.id, "todos", false, tagId, canal);
     lista = c0.some((x) => x.lista !== "descartado" && x.total > 0) ? "todos" : "descartado";
   }
-  const { rows, counts, canales } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId, canal);
+  const { rows: todas, counts, canales } = await listProspects(project.id, lista, !todos && lista !== "descartado", tagId, canal);
+  const q = typeof sp.q === "string" ? sp.q : "";
+  const rows = q
+    ? todas.filter((r) => {
+        const f = json<Record<string, unknown>>(r.ficha_json, {});
+        return coincide(q, r.nombre, r.ciudad, r.estado_mx, r.correo, r.whatsapp, r.etiqueta, String(f.tipo ?? ""), String(f.sitio_web ?? ""), String(f.vimos ?? f.observacion ?? ""));
+      })
+    : todas;
   const tagMap = tagsByProspect(rows.map((r) => r.id));
   const desde = lastSeen(project.id, "prospectos");
   const nuevos = rows.filter((r) => esNuevo(r.creado_en, desde)).length;
@@ -71,6 +80,7 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
     if (t) p.set("tag", String(t));
     const c = o.canal === undefined ? canal : o.canal;
     if (c) p.set("canal", c);
+    if (q) p.set("q", q);
     return `?${p}`;
   };
   const profile = readProfile();
@@ -84,7 +94,10 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <SeenTracker projectId={project.id} seccion="prospectos" />
-      <PageTitle>Prospectos</PageTitle>
+      <div className="flex flex-wrap items-start justify-between gap-x-4">
+        <PageTitle>Prospectos</PageTitle>
+        <SearchBox placeholder="Buscar negocio, ciudad, correo o tipo" className="mb-4 w-full max-w-xs pt-3 sm:mb-0" />
+      </div>
       {nuevos > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevos} nuevo(s)</p>}
       <div className="mb-5 flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-line pb-3">
         {LISTAS.map((l) => {
@@ -129,11 +142,11 @@ async function ProspectosContent({ params, searchParams }: PageProps<"/proyectos
 
       {rows.length === 0 ? (
         <Empty>
-          {todos || lista === "descartado" ? "No hay prospectos en esta lista." : "Nada por revisar aquí. Busca prospectos desde Resumen."}
+          {q ? `Nada coincide con «${q}» en esta lista.` : todos || lista === "descartado" ? "No hay prospectos en esta lista." : "Nada por revisar aquí. Busca prospectos desde Resumen."}
         </Empty>
       ) : (
         // Al cambiar de lista o filtro se vuelve a montar: la selección y los avisos empiezan de cero.
-        <Fragment key={`${lista}|${tagId ?? ""}|${canal ?? ""}|${todos ? 1 : 0}`}>
+        <Fragment key={`${lista}|${tagId ?? ""}|${canal ?? ""}|${todos ? 1 : 0}|${q}`}>
         <BulkBar projectId={project.id} slug={project.slug} tagId={tagId} total={rows.length} />
         <ul className="card divide-y divide-line">
           {rows.map((r) => {

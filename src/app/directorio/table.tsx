@@ -48,6 +48,8 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [proyecto, setProyecto] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const marcar = (c: string) => setMarcados((m) => { const n = new Set(m); if (n.has(c)) n.delete(c); else n.add(c); return n; });
   // El tamaño de página se recuerda en este navegador; 50 si no se ha elegido.
   const guardado = useSyncExternalStore(sinSuscripcion, leerTamano, () => null);
   const [elegido, setPorPagina] = useState<number | null>(null);
@@ -88,9 +90,6 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
 
   return (
     <div>
-      <p className="-mt-3 mb-5 text-sm text-ink-2">
-        {filas.length} correos sin rebote, de todos los proyectos. <Star size={13} className="-mt-0.5 inline fill-[#d4a564] text-[#d4a564]" aria-hidden /> = respondió.
-      </p>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <label className="relative min-w-[14rem] flex-1">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
@@ -100,8 +99,8 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
           <option value="">Todos los proyectos</option>
           {proyectos.map((p) => <option key={p.slug} value={p.slug}>{p.nombre}</option>)}
         </select>
-        <button type="button" className="btn" onClick={() => csv(visibles)} title="Descargar lo que se ve en la tabla">
-          <Download size={15} /> CSV
+        <button type="button" className="btn" onClick={() => csv(marcados.size ? filas.filter((f) => marcados.has(f.correo)) : visibles)}>
+          <Download size={15} /> {marcados.size ? `CSV (${marcados.size})` : "CSV"}
         </button>
       </div>
       <div className="mb-3 flex flex-wrap gap-1.5">
@@ -113,8 +112,15 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="hidden grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_1.25rem] gap-3 border-b border-line bg-[#faf9f5] px-4 py-2.5 text-xs font-medium text-ink-3 md:grid">
-          <span />
+        <div className="hidden grid-cols-[1.25rem_1.5rem_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_1.25rem] gap-3 border-b border-line bg-[#faf9f5] px-4 py-2.5 text-xs font-medium text-ink-3 md:grid">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--accent)]"
+            aria-label="Seleccionar todos los visibles"
+            checked={enPagina.length > 0 && enPagina.every((f) => marcados.has(f.correo))}
+            onChange={(e) => setMarcados((m) => { const n = new Set(m); for (const f of enPagina) if (e.target.checked) n.add(f.correo); else n.delete(f.correo); return n; })}
+          />
+          <span className="flex justify-center" title="Respondió"><Star size={13} className="fill-[#d4a564] text-[#d4a564]" aria-label="Respondió" /></span>
           <span>Correo</span>
           <span>Negocio</span>
           <span>Industria</span>
@@ -128,15 +134,23 @@ export function DirectoryTable({ filas }: { filas: DirectorioFila[] }) {
             {enPagina.map((f) => {
               const open = abierto === f.correo;
               return (
-                <li key={f.correo}>
+                <li key={f.correo} className="relative">
+                  <input
+                    type="checkbox"
+                    className="absolute left-4 top-[0.95rem] z-10 h-4 w-4 accent-[var(--accent)]"
+                    checked={marcados.has(f.correo)}
+                    onChange={() => marcar(f.correo)}
+                    aria-label={`Seleccionar ${f.correo}`}
+                  />
                   <button
                     type="button"
                     onClick={() => setAbierto(open ? null : f.correo)}
                     aria-expanded={open}
-                    className="grid w-full grid-cols-[2rem_minmax(0,1fr)_1.25rem] items-center gap-x-3 gap-y-0.5 px-4 py-3 text-left text-sm hover:bg-[#fcfbf8] md:grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_1.25rem]"
+                    className="grid w-full grid-cols-[1.25rem_1.5rem_minmax(0,1fr)_1.25rem] items-center gap-x-3 gap-y-0.5 px-4 py-3 text-left text-sm hover:bg-[#fcfbf8] md:grid-cols-[1.25rem_1.5rem_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_1.25rem]"
                   >
+                    <span className="row-span-3 md:row-span-1" aria-hidden />
                     <span className="row-span-3 flex justify-center md:row-span-1">
-                      {f.respondio ? <Star size={16} className="fill-[#d4a564] text-[#d4a564]" aria-label="Respondió" /> : <span className="h-1 w-1 rounded-full bg-line-strong" aria-hidden />}
+                      {f.respondio ? <Star size={15} className="fill-[#d4a564] text-[#d4a564]" aria-label="Respondió" /> : null}
                     </span>
                     <span className="truncate font-mono text-[13px]">{f.correo}</span>
                     <span className="hidden truncate md:block">{f.negocio}</span>

@@ -77,3 +77,11 @@ export function detectEstado(lugar: string | null | undefined): string | null {
   }
   return best?.estado ?? null;
 }
+
+/** Búsqueda en listas: todas las palabras de `q` aparecen en alguno de los textos, sin importar acentos ni mayúsculas. */
+export function coincide(q: string | null | undefined, ...textos: (string | null | undefined)[]): boolean {
+  const palabras = norm(q ?? "").split(" ").filter(Boolean);
+  if (!palabras.length) return true;
+  const hay = norm(textos.filter(Boolean).join(" "));
+  return palabras.every((p) => hay.includes(p));
+}

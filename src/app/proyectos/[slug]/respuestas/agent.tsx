@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ArrowUp, LoaderCircle, Sparkles } from "lucide-react";
-import { suggestFollowup, suggestReply } from "@/app/actions";
+import { suggestFollowup, suggestReply, suggestThreadFollowup } from "@/app/actions";
 import { CopyButton } from "@/components/client";
 import { toast } from "@/components/toaster";
 
@@ -10,13 +10,13 @@ import { toast } from "@/components/toaster";
  * Agente que propone una respuesta (o un seguimiento) y la rehace con lo que le pidas.
  * Solo redacta: copiar y mandar sigue siendo cosa tuya.
  */
-export function AgentReply({ tipo, id, sugerencia, waPhone }: { tipo: "respuesta" | "seguimiento"; id: number; sugerencia: string | null; waPhone?: string | null }) {
+export function AgentReply({ tipo, id, sugerencia, waPhone }: { tipo: "respuesta" | "seguimiento" | "hilo"; id: number; sugerencia: string | null; waPhone?: string | null }) {
   const [pending, start] = useTransition();
   const [indicacion, setIndicacion] = useState("");
 
   const pedir = (ind?: string) =>
     start(async () => {
-      const r = tipo === "respuesta" ? await suggestReply(id, ind) : await suggestFollowup(id, ind);
+      const r = tipo === "respuesta" ? await suggestReply(id, ind) : tipo === "hilo" ? await suggestThreadFollowup(id, ind) : await suggestFollowup(id, ind);
       if (r?.error) toast(r.error, "error");
       else setIndicacion("");
     });
@@ -25,7 +25,7 @@ export function AgentReply({ tipo, id, sugerencia, waPhone }: { tipo: "respuesta
     return (
       <button type="button" className="btn btn-sm" disabled={pending} onClick={() => pedir()}>
         {pending ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
-        {pending ? "Redactando…" : tipo === "respuesta" ? "Proponer respuesta" : "Proponer seguimiento"}
+        {pending ? (tipo === "hilo" ? "Leyendo el hilo…" : "Redactando…") : tipo === "respuesta" ? "Proponer respuesta" : tipo === "hilo" ? "Dar seguimiento" : "Proponer seguimiento"}
       </button>
     );
   }

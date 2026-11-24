@@ -8,6 +8,8 @@ import { Info } from "@/components/info";
 import { projectTags } from "@/lib/tags";
 import { ReplyForm, SyncButton, ReviewReply } from "./client";
 import { AgentReply } from "./agent";
+import { SearchBox } from "@/components/search-box";
+import { coincide } from "@/lib/text";
 import { BrochureButton, BrochurePanel } from "./brochure";
 import { FollowupDays } from "./followup";
 import { readSettings } from "@/lib/profile";
@@ -43,7 +45,11 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   if (!project) notFound();
   const tags = projectTags(project.id);
   const tagId = tags.some((t) => String(t.id) === sp.tag) ? Number(sp.tag) : null;
-  const { replies, sinRespuesta, retomar } = await listReplies(project.id, tagId);
+  const lr = await listReplies(project.id, tagId);
+  const q = typeof sp.q === "string" ? sp.q : "";
+  const replies = q ? lr.replies.filter((r) => coincide(q, r.nombre, r.para, r.resumen, r.quien_respondio, r.tanda)) : lr.replies;
+  const sinRespuesta = q ? lr.sinRespuesta.filter((s) => coincide(q, s.nombre, s.para, s.tanda)) : lr.sinRespuesta;
+  const retomar = lr.retomar;
   const desde = lastSeen(project.id, "respuestas");
   const nuevas = replies.filter((r) => esNuevo(r.creado_en, desde)).length;
   const a = responseAnalysis(project.id);
@@ -76,7 +82,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   );
   const qs = (cambio: Record<string, string | null>) => {
     const p = new URLSearchParams();
-    const base: Record<string, string | null> = { vista: vista === "con" ? null : vista, filtro: filtro === "todas" ? null : filtro, tag: tagId ? String(tagId) : null, ...cambio };
+    const base: Record<string, string | null> = { vista: vista === "con" ? null : vista, filtro: filtro === "todas" ? null : filtro, tag: tagId ? String(tagId) : null, q: q || null, ...cambio };
     if (base.vista === "con") base.vista = null;
     for (const [k, v] of Object.entries(base)) if (v) p.set(k, v);
     const s = p.toString();
@@ -86,9 +92,10 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
   return (
     <>
       <SeenTracker projectId={project.id} seccion="respuestas" />
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4">
         <PageTitle>Respuestas</PageTitle>
-        <div className="pt-3"><TagFilter tags={tags} active={tagId} hrefFor={(id) => qs({ tag: id ? String(id) : null })} /></div>
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-3">
+          <SearchBox placeholder="Buscar negocio, correo o respuesta" className="w-64" /><TagFilter tags={tags} active={tagId} hrefFor={(id) => qs({ tag: id ? String(id) : null })} /></div>
       </div>
       {nuevas > 0 && <p className="-mt-3 mb-4 text-sm text-accent">{nuevas} nueva(s)</p>}
       <div className="mb-8 flex flex-wrap items-center gap-8">
@@ -122,7 +129,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
             })}
           </div>
           {visibles.length === 0 ? (
-            <Empty>{conRespuesta.length === 0 ? "Aún no hay respuestas." : "Nada con este filtro."}</Empty>
+            <Empty>{q ? `Nada coincide con «${q}».` : conRespuesta.length === 0 ? "Aún no hay respuestas." : "Nada con este filtro."}</Empty>
           ) : (
             <ul className="space-y-3">
               {visibles.map((r) => {
@@ -145,11 +152,13 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
                       <div className="flex flex-wrap items-center gap-2">
                         <ReplyDetailButton replyId={r.id} slug={project.slug} />
                         {!r.sugerencia && <AgentReply tipo="respuesta" id={r.id} sugerencia={null} />}
+                        {!r.seguimiento && <AgentReply tipo="hilo" id={r.id} sugerencia={null} />}
                         <BrochureButton replyId={r.id} estado={bro} />
                       </div>
                     </div>
                     {!r.revisado_por_humano && <div className="mt-3"><ReviewReply replyId={r.id} actual={r.clasificacion} /></div>}
                     {r.sugerencia && <AgentReply tipo="respuesta" id={r.id} sugerencia={r.sugerencia} />}
+                    {r.seguimiento && <AgentReply tipo="hilo" id={r.id} sugerencia={r.seguimiento} />}
                     <BrochurePanel replyId={r.id} prospectId={r.prospect_id} estado={bro} />
                   </li>
                 );
@@ -180,7 +189,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
 
       {vista === "sin" && (
         sinRespuesta.length === 0 ? (
-          <Empty>Todos los correos enviados tienen respuesta.</Empty>
+          <Empty>{q ? `Nada coincide con «${q}».` : "Todos los correos enviados tienen respuesta."}</Empty>
         ) : (
           <ul className="space-y-3">{sinRespuesta.map(itemSin)}</ul>
         )
@@ -188,7 +197,7 @@ async function RespuestasContent({ params, searchParams }: PageProps<"/proyectos
 
       {vista === "rebotes" && (
         rebotes.length === 0 ? (
-          <Empty>Ningún correo ha rebotado.</Empty>
+          <Empty>{q ? `Nada coincide con «${q}».` : "Ningún correo ha rebotado."}</Empty>
         ) : (
           <ul className="card divide-y divide-line">
             {rebotes.map((r) => (

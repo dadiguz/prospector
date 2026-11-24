@@ -139,13 +139,13 @@ export async function listDrafts(projectId: number, tag: number | null = null) {
 
 export type ReplyRow = {
   id: number; nombre: string; clasificacion: string; fecha: string | null; resumen: string; quien_respondio: string | null;
-  pide: string | null; sugerencia: string | null; tanda: string | null; para: string | null; prospect_id: number; message_id: number;
+  pide: string | null; sugerencia: string | null; seguimiento: string | null; tanda: string | null; para: string | null; prospect_id: number; message_id: number;
   revisado_por_humano: number; confianza: number | null; creado_en: string | null;
 };
 export async function listReplies(projectId: number, tag: number | null = null) {
   await io();
   const replies = all<ReplyRow>(
-    `SELECT r.id, o.nombre, r.clasificacion, r.fecha, r.resumen, r.quien_respondio, r.pide, r.sugerencia, m.tanda, m.para, p.id prospect_id, m.id message_id,
+    `SELECT r.id, o.nombre, r.clasificacion, r.fecha, r.resumen, r.quien_respondio, r.pide, r.sugerencia, m.seguimiento, m.tanda, m.para, p.id prospect_id, m.id message_id,
             r.revisado_por_humano, r.confianza, r.creado_en
      FROM reply_events r JOIN messages m ON m.id = r.message_id JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
      WHERE p.project_id = ? AND ${tagFilterSql("p.id")} ORDER BY r.fecha DESC, r.id DESC`, projectId, tag, tag);
