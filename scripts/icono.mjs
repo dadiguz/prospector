@@ -1,50 +1,21 @@
-// Genera el icono de Prospector: un anillo de 8 fulminantes (como los de pistola de juguete)
-// con uno recién disparado: el chispazo sale de ese fulminante con rayos pseudoaleatorios.
-// Semilla fija: siempre sale igual. Uso: node scripts/icono.mjs [semilla] > src/app/icon.svg
-const seed = Number(process.argv[2] ?? 7);
-let s = seed >>> 0;
-const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+// Genera el icono de Prospector: un anillo de 8 fulminantes (como los de pistola de juguete),
+// con contorno negro y sin fondo. Uso: node scripts/icono.mjs > src/app/icon.svg
 const f = (n) => n.toFixed(2);
-const C = 34.5, R = 15, N = 8, DISPARADO = 7; // el de arriba a la izquierda
-const CREMA = "#faf9f5", FONDO = "#faf9f5", NEGRO = "#1f1e1d", ROJO = "#c96442", DORADO = "#e8b04a";
-const out = [];
+const C = 32, R = 19, N = 8, CAP = 7, ANILLO = 6, BORDE = 2;
+const NEGRO = "#1f1e1d", ROJO = "#c96442", DORADO = "#e8b04a", BRILLO = "#faf9f5";
 
-// Anillo de plástico
-out.push(`<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${ROJO}" stroke-width="5"/>`);
-out.push(`<circle cx="${C}" cy="${C}" r="${R - 6.8}" fill="${FONDO}"/>`);
-
-let disparo = null;
-for (let i = 0; i < N; i++) {
+const pos = Array.from({ length: N }, (_, i) => {
   const a = -Math.PI / 2 + (i / N) * Math.PI * 2;
-  const x = C + Math.cos(a) * R, y = C + Math.sin(a) * R;
-  if (i === DISPARADO) {
-    // Fulminante reventado: queda el hueco quemado.
-    out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="5.3" fill="${ROJO}"/>`);
-    out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="3" fill="${NEGRO}"/>`);
-    disparo = { x, y, a };
-    continue;
-  }
-  out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="5.3" fill="${ROJO}"/>`);
-  out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="3.7" fill="${DORADO}"/>`);
-  out.push(`<circle cx="${f(x - 1)}" cy="${f(y - 1)}" r="1" fill="${CREMA}" opacity=".7"/>`);
-}
-
-// Chispazo: rayos hacia afuera del fulminante disparado, con largos, grosores y ángulos al azar.
-const { x, y, a } = disparo;
-const rayos = [];
-for (let i = 0; i < 9; i++) {
-  const d = a + (rand() - 0.5) * 1.9;
-  const r0 = 6 + rand() * 1.5;
-  const r1 = r0 + 4 + rand() * 9 * (1 - Math.abs(d - a) / 1.2);
-  rayos.push(`<line x1="${f(x + Math.cos(d) * r0)}" y1="${f(y + Math.sin(d) * r0)}" x2="${f(x + Math.cos(d) * r1)}" y2="${f(y + Math.sin(d) * r1)}" stroke="${i % 3 ? DORADO : NEGRO}" stroke-width="${f(1 + rand() * 1.2)}" stroke-linecap="round"/>`);
-}
-for (let i = 0; i < 4; i++) {
-  const d = a + (rand() - 0.5) * 2.2, r = 13 + rand() * 6;
-  rayos.push(`<circle cx="${f(x + Math.cos(d) * r)}" cy="${f(y + Math.sin(d) * r)}" r="${f(0.6 + rand() * 0.7)}" fill="${DORADO}"/>`);
-}
+  return [C + Math.cos(a) * R, C + Math.sin(a) * R];
+});
+const anillo = (color, extra) => `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${color}" stroke-width="${f(ANILLO + extra * 2)}"/>`;
+const caps = (color, r) => pos.map(([x, y]) => `<circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${color}"/>`).join("\n  ");
 
 console.log(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect x="1.75" y="1.75" width="60.5" height="60.5" rx="14" fill="${FONDO}" stroke="${NEGRO}" stroke-width="3"/>
-  ${rayos.join("\n  ")}
-  ${out.join("\n  ")}
+  ${anillo(NEGRO, BORDE)}
+  ${caps(NEGRO, CAP + BORDE)}
+  ${anillo(ROJO, 0)}
+  ${caps(ROJO, CAP)}
+  ${pos.map(([x, y]) => `<circle cx="${f(x)}" cy="${f(y)}" r="${f(CAP - 1.8)}" fill="${DORADO}"/>`).join("\n  ")}
+  ${pos.map(([x, y]) => `<circle cx="${f(x - 1.6)}" cy="${f(y - 1.6)}" r="1.3" fill="${BRILLO}" opacity=".85"/>`).join("\n  ")}
 </svg>`);
