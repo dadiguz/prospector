@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import type { SidebarProject } from "@/lib/queries";
 import { ProjectIcon } from "@/lib/project-icons";
 import { AppLogo } from "./logo";
-import { ChevronDown, House, Inbox, LayoutGrid, Menu, Plus, Search, Settings, SlidersHorizontal, SquarePen, Users, Check } from "lucide-react";
+import { BookUser, ChevronDown, House, Inbox, LayoutGrid, Menu, Plus, Search, Settings, SlidersHorizontal, SquarePen, Users, Check } from "lucide-react";
 
 /* Iconos de línea al estilo de los símbolos del sistema. */
 const ic = { size: 18, strokeWidth: 1.6, "aria-hidden": true } as const;
@@ -18,6 +18,7 @@ const ICON = {
   respuestas: <Inbox {...ic} />,
   config: <SlidersHorizontal {...ic} />,
   inicio: <House {...ic} />,
+  directorio: <BookUser {...ic} />,
   ajustes: <Settings {...ic} />,
   mas: <Plus {...ic} />,
   menu: <Menu {...ic} />,
@@ -107,6 +108,10 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
         <AppLogo size={26} />
         Prospector
       </Link>
+
+      <nav aria-label="Principal">
+        <Item href="/directorio" icon={ICON.directorio} label="Directorio" active={starts("/directorio")} onNavigate={cerrar} />
+      </nav>
 
       {projects.length > 0 ? (
         <div ref={pickerRef} className="relative">

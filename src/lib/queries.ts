@@ -180,3 +180,62 @@ export async function sidebarProjects(): Promise<SidebarProject[]> {
       (SELECT COUNT(*) FROM jobs j WHERE j.project_id = p.id AND j.estado IN ('pendiente','en_curso','en_pausa')) buscando
     FROM projects p WHERE p.estado <> 'archivado' ORDER BY p.id`);
 }
+
+/* ---------- Directorio ---------- */
+
+export type DirectorioFila = {
+  correo: string;
+  negocio: string;
+  ciudad: string | null;
+  estado_mx: string | null;
+  respondio: number;
+  ultima_respuesta: string | null;
+  enviados: number;
+  baja: number;
+  proyectos: { slug: string; nombre: string; icono: string | null; color: string | null; segmento: string | null; lista: string; prospect_id: number }[];
+  ficha: { tipo?: string; sitio_web?: string; observacion?: string; vimos?: string; vende?: string; como_cobra_hoy?: string; fuente_del_correo?: string };
+};
+
+/**
+ * Todos los correos que no rebotaron, uno por dirección, con el negocio, la industria (segmento)
+ * y los proyectos donde se consideró. "Respondió" cuenta cualquier respuesta salvo rebote y auto-respuesta.
+ */
+export async function directorio(): Promise<DirectorioFila[]> {
+  await io();
+  const filas = all<{ correo: string; org_id: number; negocio: string; ciudad: string | null; estado_mx: string | null; proyectos: string; ficha_json: string | null; respondio: number; ultima: string | null; enviados: number; baja: number }>(`
+    WITH c AS (
+      SELECT lower(trim(c.valor)) correo, MIN(c.organization_id) org_id
+      FROM contacts c
+      WHERE c.canal = 'correo' AND c.valor LIKE '%@%'
+      GROUP BY lower(trim(c.valor))
+      HAVING SUM(c.estado = 'reboto') = 0
+    )
+    SELECT c.correo, o.id org_id, o.nombre negocio, o.ciudad, o.estado estado_mx,
+      (SELECT json_group_array(json_object('slug', pr.slug, 'nombre', pr.nombre, 'icono', json_extract(pr.config_json, '$.icono'), 'color', json_extract(pr.config_json, '$.color'),
+              'segmento', s.nombre, 'lista', p.lista, 'prospect_id', p.id))
+         FROM prospects p JOIN projects pr ON pr.id = p.project_id LEFT JOIN segments s ON s.id = p.segment_id
+         WHERE p.organization_id = o.id) proyectos,
+      (SELECT p.ficha_json FROM prospects p WHERE p.organization_id = o.id ORDER BY p.id DESC LIMIT 1) ficha_json,
+      EXISTS (SELECT 1 FROM reply_events r JOIN messages m ON m.id = r.message_id
+              WHERE lower(m.para) = c.correo AND r.clasificacion NOT IN ('rebote','auto_respuesta')) respondio,
+      (SELECT MAX(r.fecha) FROM reply_events r JOIN messages m ON m.id = r.message_id
+              WHERE lower(m.para) = c.correo AND r.clasificacion NOT IN ('rebote','auto_respuesta')) ultima,
+      (SELECT COUNT(*) FROM messages m WHERE lower(m.para) = c.correo AND m.estado = 'enviado') enviados,
+      EXISTS (SELECT 1 FROM suppression_list sl WHERE sl.tipo = 'correo' AND lower(sl.valor) = c.correo AND sl.motivo NOT LIKE '%rebot%') baja
+    FROM c JOIN organizations o ON o.id = c.org_id
+    -- Un rebote registrado en respuestas también lo saca, aunque el contacto no se haya marcado.
+    WHERE NOT EXISTS (SELECT 1 FROM reply_events r JOIN messages m ON m.id = r.message_id WHERE lower(m.para) = c.correo AND r.clasificacion = 'rebote')
+    ORDER BY respondio DESC, enviados > 0 DESC, o.nombre COLLATE NOCASE`);
+  return filas.map((f) => ({
+    correo: f.correo,
+    negocio: f.negocio,
+    ciudad: f.ciudad,
+    estado_mx: f.estado_mx,
+    respondio: f.respondio,
+    ultima_respuesta: f.ultima,
+    enviados: f.enviados,
+    baja: f.baja,
+    proyectos: json<DirectorioFila["proyectos"]>(f.proyectos, []).filter((p, i, a) => a.findIndex((x) => x.slug === p.slug) === i),
+    ficha: json<DirectorioFila["ficha"]>(f.ficha_json, {}),
+  }));
+}
