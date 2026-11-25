@@ -3,20 +3,20 @@
 import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { FileUp, LoaderCircle, Plus, Sparkles, X } from "lucide-react";
-import { crearProyectoDesdeIdea, importarCarga } from "@/app/actions";
+import { crearProyectoDesdeIdea, crearSegmentoDesdeIdea, importarCarga } from "@/app/actions";
 import type { IdeaProyecto, Registro } from "@/lib/carga";
 import { ProjectIcon } from "@/lib/project-icons";
 import { toast } from "@/components/toaster";
 
 export type ProyectoOpcion = { slug: string; nombre: string; icono: string | null; color: string | null };
-type Idea = IdeaProyecto & { creando?: boolean; slug?: string };
+type Idea = IdeaProyecto & { creando?: boolean; slug?: string; segmento?: string };
 type Filtro = "todos" | "con" | "sin" | "sin_info" | "rubro" | "existentes";
 const POR_PAGINA = 100;
 
 const GUARDADO = "carga-directorio";
 const pillCls = (on: boolean) => `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`;
 
-type Estado = { registros: Registro[]; ideas: Idea[]; asignado: Record<string, string>; agregados: string[] };
+type Estado = { registros: Registro[]; ideas: Idea[]; asignado: Record<string, string>; agregados: string[]; segmentos?: Record<string, string> };
 const leerCrudo = () => {
   try {
     return sessionStorage.getItem(GUARDADO);
@@ -129,6 +129,30 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
     toast(r.message ?? "Proyecto creado.", "ok", { href: `/proyectos/${r.slug}`, label: "Ver proyecto" });
   };
 
+  const comoSegmento = async (k: number) => {
+    const idea = estado?.ideas[k];
+    if (!idea?.proyecto) return;
+    const slug = idea.proyecto;
+    setEstado((e) => ({ ...e, ideas: e.ideas.map((x, j) => (j === k ? { ...x, creando: true } : x)) }));
+    const r = await crearSegmentoDesdeIdea(slug, idea.titulo, idea.idea);
+    if (!r?.ok || !r.segmento) {
+      toast(r?.error ?? "No se pudo agregar.", "error");
+      setEstado((e) => ({ ...e, ideas: e.ideas.map((x, j) => (j === k ? { ...x, creando: false } : x)) }));
+      return;
+    }
+    const seg = r.segmento;
+    setEstado((e) => {
+      const mios = idea.correos.filter((c) => e.asignado[c] === "ninguno");
+      return {
+        ...e,
+        ideas: e.ideas.map((x, j) => (j === k ? { ...x, creando: false, slug, segmento: seg } : x)),
+        asignado: { ...e.asignado, ...Object.fromEntries(mios.map((c) => [c, slug])) },
+        segmentos: { ...e.segmentos, ...Object.fromEntries(mios.map((c) => [c, seg])) },
+      };
+    });
+    toast(r.message ?? "Segmento agregado.", "ok", { href: `/proyectos/${slug}/editar`, label: "Ver proyecto" });
+  };
+
   const registros = useMemo(() => estado?.registros ?? [], [estado]);
   const asignado = estado?.asignado ?? {};
   const agregados = new Set(estado?.agregados ?? []);
@@ -147,7 +171,7 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
     startGuardar(async () => {
       const filas = registros
         .filter((r) => sel.has(r.correo))
-        .map((r) => ({ correo: r.correo, negocio: r.negocio || r.correo.split("@")[1], sitio: r.sitio, ciudad: r.ciudad, estado: r.estado, telefono: r.telefono, descripcion: r.descripcion, proyecto: deProyecto(r.correo), segmento: deProyecto(r.correo) === r.proyecto ? r.segmento : "" }));
+        .map((r) => ({ correo: r.correo, negocio: r.negocio || r.correo.split("@")[1], sitio: r.sitio, ciudad: r.ciudad, estado: r.estado, telefono: r.telefono, descripcion: r.descripcion, proyecto: deProyecto(r.correo), segmento: (deProyecto(r.correo) && estado?.segmentos?.[r.correo]) || (deProyecto(r.correo) === r.proyecto ? r.segmento : "") }));
       const res = await importarCarga(filas);
       if (res?.message) toast(res.message, "ok", { href: "/directorio", label: "Ver directorio" });
       if (res?.error) toast(res.error, "error");
@@ -213,22 +237,33 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
 
       {estado.ideas.length > 0 && (
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {estado.ideas.map((i, k) => (
-            <div key={k} className="card flex flex-col p-4">
-              <div className="mb-1 flex items-center gap-2 text-xs text-ink-3"><Sparkles size={13} className="text-accent" /> Idea para proyecto · {i.correos.length} correos</div>
-              <b className="font-medium">{i.titulo}</b>
-              <p className="mt-1 line-clamp-3 text-sm text-ink-2">{i.idea}</p>
-              <div className="mt-3 flex items-center justify-end">
-                {i.slug ? (
-                  <Link href={`/proyectos/${i.slug}`} className="btn btn-sm">Creado · ver</Link>
-                ) : (
-                  <button type="button" className="btn btn-sm btn-primary" disabled={i.creando} onClick={() => crear(k)}>
-                    {i.creando ? <><LoaderCircle size={13} className="animate-spin" /> Creando… (1 min)</> : "Crear"}
-                  </button>
-                )}
+          {estado.ideas.map((i, k) => {
+            const destino = i.proyecto ? proyectos.find((p) => p.slug === i.proyecto) : undefined;
+            return (
+              <div key={k} className="card flex flex-col p-4">
+                <div className="mb-1 flex items-center gap-2 text-xs text-ink-3">
+                  {destino ? <ProjectIcon nombre={destino.nombre} icono={destino.icono} color={destino.color} size={16} /> : <Sparkles size={13} className="text-accent" />}
+                  {destino ? `Segmento para ${destino.nombre}` : "Idea para proyecto"} · {i.correos.length} correos
+                </div>
+                <b className="font-medium">{i.titulo}</b>
+                <p className="mt-1 line-clamp-3 text-sm text-ink-2">{i.idea}</p>
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                  {i.slug ? (
+                    <Link href={i.segmento ? `/proyectos/${i.slug}/editar` : `/proyectos/${i.slug}`} className="btn btn-sm">{i.segmento ? "Agregado · ver" : "Creado · ver"}</Link>
+                  ) : i.creando ? (
+                    <button type="button" className="btn btn-sm btn-primary" disabled><LoaderCircle size={13} className="animate-spin" /> {destino ? "Agregando…" : "Creando… (1 min)"}</button>
+                  ) : destino ? (
+                    <>
+                      <button type="button" className="btn btn-sm btn-quiet" onClick={() => crear(k)}>Proyecto nuevo</button>
+                      <button type="button" className="btn btn-sm btn-primary" onClick={() => comoSegmento(k)}>Agregar a {destino.nombre}</button>
+                    </>
+                  ) : (
+                    <button type="button" className="btn btn-sm btn-primary" onClick={() => crear(k)}>Crear</button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

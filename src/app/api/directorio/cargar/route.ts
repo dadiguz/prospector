@@ -72,7 +72,7 @@ export async function POST(req: Request) {
         const sinProyecto = registros.filter((r) => r.proyecto === "ninguno" && !r.rebote);
         if (sinProyecto.length) {
           send({ tipo: "pensando" });
-          const ideas = await agruparIdeas(sinProyecto, empresa).catch(() => []);
+          const ideas = await agruparIdeas(sinProyecto, empresa, proyectos).catch(() => []);
           send({ tipo: "ideas", ideas });
         }
         send({ tipo: "fin" });

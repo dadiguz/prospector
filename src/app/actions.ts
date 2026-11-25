@@ -20,7 +20,7 @@ import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
 import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { generarBrochure } from "@/lib/brochure";
-import { FilaImport, importarFilas } from "@/lib/carga";
+import { FilaImport, agregarSegmento, importarFilas } from "@/lib/carga";
 import { generarProyecto } from "@/lib/project-gen";
 import { leerHilo } from "@/lib/gmail/thread";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
@@ -697,6 +697,21 @@ export async function importarCarga(filas: unknown[]): Promise<FormState & { dir
 }
 
 /** Crea un proyecto completo desde una idea (sin pasar por el editor). Tarda alrededor de un minuto. */
+/** Agrega una idea de la carga como segmento nuevo de un proyecto existente. */
+export async function crearSegmentoDesdeIdea(slug: string, titulo: string, idea: string): Promise<FormState & { segmento?: string }> {
+  requireProfile();
+  const d = z.object({ slug: z.string().min(1).max(120), titulo: z.string().max(200), idea: z.string().trim().min(10).max(4000) }).safeParse({ slug, titulo, idea });
+  if (!d.success) return { error: "La idea es muy corta." };
+  try {
+    const segmento = await agregarSegmento(d.data.slug, d.data.titulo, d.data.idea);
+    audit(readProfile()?.correo ?? "owner", "segmento_desde_carga", `${d.data.slug}: ${segmento}`);
+    refresh();
+    return { ok: true, segmento, message: `Segmento "${segmento}" agregado.` };
+  } catch (e) {
+    return { error: e instanceof NoApiKeyError ? e.message : (e as Error).message };
+  }
+}
+
 export async function crearProyectoDesdeIdea(idea: string): Promise<FormState & { slug?: string; nombre?: string; icono?: string | null; color?: string | null }> {
   requireProfile();
   const texto = z.string().trim().min(10).max(4000).safeParse(idea);
