@@ -2,8 +2,9 @@
 
 import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
-import { FileUp, LoaderCircle, Plus, Sparkles, X } from "lucide-react";
-import { crearProyectoDesdeIdea, crearSegmentoDesdeIdea, importarCarga } from "@/app/actions";
+import { FileUp, LoaderCircle, Plus, Search, Sparkles, X } from "lucide-react";
+import { coincide } from "@/lib/text";
+import { crearProyectoDesdeIdea, crearSegmentoDesdeIdea, importarCarga, repensarIdeas } from "@/app/actions";
 import type { IdeaProyecto, Registro } from "@/lib/carga";
 import { ProjectIcon } from "@/lib/project-icons";
 import { toast } from "@/components/toaster";
@@ -24,7 +25,11 @@ const leerCrudo = () => {
     return null;
   }
 };
-const sinSuscripcion = () => () => {};
+// Avisa una vez al montar para que, tras hidratar, se lea lo guardado en esta pestaña.
+const alMontar = (cb: () => void) => {
+  const t = setTimeout(cb, 0);
+  return () => clearTimeout(t);
+};
 
 export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) {
   const [proyectos, setProyectos] = useState(inicial);
@@ -34,7 +39,7 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
   const [leyendo, setLeyendo] = useState<{ hechos: number; total: number; fase: string; detalle?: string } | null>(null);
   const [limite, setLimite] = useState(POR_PAGINA);
   // Lo último que se cargó sigue aquí si sales y regresas (solo en esta pestaña).
-  const crudo = useSyncExternalStore(sinSuscripcion, leerCrudo, () => null);
+  const crudo = useSyncExternalStore(alMontar, leerCrudo, () => null);
   const [local, setEstadoRaw] = useState<Estado | null | undefined>(undefined);
   const estado: Estado | null = useMemo(() => {
     if (local !== undefined) return local;
@@ -46,7 +51,9 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
   }, [local, crudo]);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [q, setQ] = useState("");
   const [guardando, startGuardar] = useTransition();
+  const [repensando, startRepensar] = useTransition();
   const input = useRef<HTMLInputElement>(null);
 
   const setEstado = (f: (e: Estado) => Estado) =>
@@ -153,6 +160,19 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
     toast(r.message ?? "Segmento agregado.", "ok", { href: `/proyectos/${slug}/editar`, label: "Ver proyecto" });
   };
 
+  const repensar = () =>
+    startRepensar(async () => {
+      const e = estado;
+      if (!e) return;
+      const filas = e.registros
+        .filter((r) => e.asignado[r.correo] === "ninguno" && !r.rebote && !e.agregados.includes(r.correo))
+        .map((r) => ({ correo: r.correo, negocio: r.negocio, giro: r.giro, descripcion: r.descripcion, idea: r.idea }));
+      const res = await repensarIdeas(filas);
+      if (res?.error) return void toast(res.error, "error");
+      // Las ideas ya creadas o agregadas se quedan; las demás se reemplazan.
+      setEstado((s) => ({ ...s, ideas: [...s.ideas.filter((i) => i.slug), ...(res?.ideas ?? [])] }));
+    });
+
   const registros = useMemo(() => estado?.registros ?? [], [estado]);
   const asignado = estado?.asignado ?? {};
   const agregados = new Set(estado?.agregados ?? []);
@@ -164,7 +184,7 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
     if (a === "mismo_rubro") return false; // se apartan de las demás vistas
     return f === "con" ? !!deProyecto(r.correo) : f === "sin" ? a === "ninguno" : f === "sin_info" ? a === "sin_info" : f === "existentes" ? r.ya_existe : true;
   };
-  const visibles = registros.filter((r) => pasa(r, filtro));
+  const visibles = registros.filter((r) => pasa(r, filtro) && coincide(q, r.correo, r.negocio, r.descripcion, r.ciudad, r.estado));
   const elegibles = visibles.filter((r) => !r.rebote && !agregados.has(r.correo));
 
   const agregar = () =>
@@ -223,16 +243,21 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
       </div>
     );
 
-  const cuenta = (f: Filtro) => registros.filter((r) => pasa(r, f)).length;
+  const cuenta = (f: Filtro) => registros.filter((r) => pasa(r, f) && coincide(q, r.correo, r.negocio, r.descripcion, r.ciudad, r.estado)).length;
   const conProyecto = registros.filter((r) => sel.has(r.correo) && deProyecto(r.correo)).length;
 
   return (
     <div className="pb-24">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-ink-2">{registros.length} correos</p>
+        <span className="flex gap-2">
+        <button type="button" className="btn btn-quiet" disabled={repensando} onClick={repensar}>
+          {repensando ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} Repensar ideas
+        </button>
         <button type="button" className="btn btn-quiet" onClick={() => { setEstadoRaw(null); try { sessionStorage.removeItem(GUARDADO); } catch {} }}>
           <Plus size={15} /> Nueva carga
         </button>
+        </span>
       </div>
 
       {estado.ideas.length > 0 && (
@@ -267,7 +292,25 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <label className="relative mr-1 block w-full sm:w-64">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
+          <input
+            className="input input-sm w-full"
+            style={{ paddingLeft: "2.1rem", paddingRight: "2rem" }}
+            placeholder="Buscar correo, negocio, giro o ciudad"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setLimite(POR_PAGINA); }}
+            onKeyDown={(e) => e.key === "Escape" && setQ("")}
+            aria-label="Buscar"
+            type="search"
+          />
+          {q && (
+            <button type="button" onClick={() => setQ("")} className="absolute right-2.5 top-1/2 flex -translate-y-1/2 rounded p-0.5 text-ink-3 hover:text-ink" aria-label="Borrar búsqueda">
+              <X size={14} />
+            </button>
+          )}
+        </label>
         {([["todos", "Todos"], ["con", "Con proyecto"], ["sin", "Sin proyecto"], ["sin_info", "Sin info suficiente"], ["existentes", "Ya en directorio"], ["rubro", "Mismo rubro"]] as [Filtro, string][]).map(([k, l]) => (
           <button key={k} type="button" className={pillCls(filtro === k)} onClick={() => { setFiltro(k); setLimite(POR_PAGINA); }}>{l} <span className="text-ink-3">{cuenta(k)}</span></button>
         ))}

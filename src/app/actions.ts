@@ -20,7 +20,7 @@ import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
 import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { generarBrochure } from "@/lib/brochure";
-import { FilaImport, agregarSegmento, importarFilas } from "@/lib/carga";
+import { FilaImport, agregarSegmento, agruparIdeas, importarFilas, proyectosParaClasificar, type IdeaProyecto, type Registro } from "@/lib/carga";
 import { generarProyecto } from "@/lib/project-gen";
 import { leerHilo } from "@/lib/gmail/thread";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
@@ -697,6 +697,23 @@ export async function importarCarga(filas: unknown[]): Promise<FormState & { dir
 }
 
 /** Crea un proyecto completo desde una idea (sin pasar por el editor). Tarda alrededor de un minuto. */
+/** Vuelve a pensar las ideas de proyecto o segmento con los correos que siguen sin proyecto. */
+export async function repensarIdeas(filas: unknown[]): Promise<FormState & { ideas?: IdeaProyecto[] }> {
+  requireProfile();
+  const d = z
+    .array(z.object({ correo: z.string().max(320), negocio: z.string().max(300), giro: z.string().max(500).optional(), descripcion: z.string().max(1000), idea: z.string().max(1000) }))
+    .max(5000)
+    .safeParse(filas);
+  if (!d.success) return { error: "Datos inválidos." };
+  if (!d.data.length) return { ok: true, ideas: [] };
+  try {
+    const ideas = await agruparIdeas(d.data as Registro[], readProfile()?.empresa ?? "", proyectosParaClasificar());
+    return { ok: true, ideas };
+  } catch (e) {
+    return { error: e instanceof NoApiKeyError ? e.message : (e as Error).message };
+  }
+}
+
 /** Agrega una idea de la carga como segmento nuevo de un proyecto existente. */
 export async function crearSegmentoDesdeIdea(slug: string, titulo: string, idea: string): Promise<FormState & { segmento?: string }> {
   requireProfile();
