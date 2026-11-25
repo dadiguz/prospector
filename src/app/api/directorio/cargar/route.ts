@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { connection } from "next/server";
 import { readProfile } from "@/lib/profile";
-import { MAX_ENTRADA, agruparIdeas, clasificarGiros, clasificarTrozo, esMismoRubro, gruposPorGiro, leerEstructurado, normalizar, proyectosParaClasificar, trozos, type ClasGiro, type Registro } from "@/lib/carga";
+import { MAX_ENTRADA, guardarCarga, tituloSugerido, agruparIdeas, clasificarGiros, clasificarTrozo, esMismoRubro, gruposPorGiro, leerEstructurado, normalizar, proyectosParaClasificar, trozos, type ClasGiro, type Registro } from "@/lib/carga";
 
-const Body = z.object({ texto: z.string().min(5).max(15_000_000) });
+const Body = z.object({ texto: z.string().min(5).max(15_000_000), titulo: z.string().trim().max(120).optional(), archivos: z.array(z.string().max(200)).max(50).optional() });
 
 /** Lee y clasifica una carga de correos. NDJSON: avance, registros e ideas. No guarda nada. */
 export async function POST(req: Request) {
@@ -68,13 +68,19 @@ export async function POST(req: Request) {
           }
         }
         const registros: Registro[] = normalizar(crudos, slugs);
-        send({ tipo: "registros", registros });
-        const sinProyecto = registros.filter((r) => r.proyecto === "ninguno" && !r.rebote);
-        if (sinProyecto.length) {
-          send({ tipo: "pensando" });
-          const ideas = await agruparIdeas(sinProyecto, empresa, proyectos).catch(() => []);
-          send({ tipo: "ideas", ideas });
+        if (!registros.length) {
+          send({ tipo: "vacio" });
+          return;
         }
+        const sinProyecto = registros.filter((r) => r.proyecto === "ninguno" && !r.rebote);
+        send({ tipo: "pensando" });
+        const archivos = (b.data.archivos ?? []).join(", ");
+        const [ideas, titulo] = await Promise.all([
+          sinProyecto.length ? agruparIdeas(sinProyecto, empresa, proyectos).catch(() => []) : Promise.resolve([]),
+          b.data.titulo || tituloSugerido(b.data.texto, archivos),
+        ]);
+        const id = guardarCarga(titulo, archivos, { registros, ideas, asignado: Object.fromEntries(registros.map((r) => [r.correo, r.proyecto])), agregados: [], segmentos: {} });
+        send({ tipo: "guardado", id });
         send({ tipo: "fin" });
       } catch (e) {
         send({ tipo: "error", error: e instanceof Error ? e.message : String(e) });

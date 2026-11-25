@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FileUp, LoaderCircle, Plus, Search, Sparkles, X } from "lucide-react";
+import { ChevronLeft, FileUp, LoaderCircle, Search, Sparkles, X } from "lucide-react";
 import { coincide } from "@/lib/text";
-import { crearProyectoDesdeIdea, crearSegmentoDesdeIdea, importarCarga, repensarIdeas } from "@/app/actions";
+import { crearProyectoDesdeIdea, crearSegmentoDesdeIdea, guardarCambiosCarga, importarCarga, repensarIdeas } from "@/app/actions";
 import type { IdeaProyecto, Registro } from "@/lib/carga";
 import { ProjectIcon } from "@/lib/project-icons";
 import { toast } from "@/components/toaster";
@@ -14,41 +15,21 @@ type Idea = IdeaProyecto & { creando?: boolean; slug?: string; segmento?: string
 type Filtro = "todos" | "con" | "sin" | "sin_info" | "rubro" | "existentes";
 const POR_PAGINA = 100;
 
-const GUARDADO = "carga-directorio";
 const pillCls = (on: boolean) => `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`;
 
-type Estado = { registros: Registro[]; ideas: Idea[]; asignado: Record<string, string>; agregados: string[]; segmentos?: Record<string, string> };
-const leerCrudo = () => {
-  try {
-    return sessionStorage.getItem(GUARDADO);
-  } catch {
-    return null;
-  }
-};
-// Avisa una vez al montar para que, tras hidratar, se lea lo guardado en esta pestaña.
-const alMontar = (cb: () => void) => {
-  const t = setTimeout(cb, 0);
-  return () => clearTimeout(t);
-};
+export type Estado = { registros: Registro[]; ideas: Idea[]; asignado: Record<string, string>; agregados: string[]; segmentos?: Record<string, string> };
+export type CargaInfo = { id: number; titulo: string; fecha: string; archivos: string };
 
-export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) {
+export function Cargar({ proyectos: inicial, carga, estadoInicial }: { proyectos: ProyectoOpcion[]; carga?: CargaInfo; estadoInicial?: Estado }) {
+  const router = useRouter();
   const [proyectos, setProyectos] = useState(inicial);
   const [texto, setTexto] = useState("");
+  const [titulo, setTitulo] = useState("");
   const [archivos, setArchivos] = useState<string[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const [leyendo, setLeyendo] = useState<{ hechos: number; total: number; fase: string; detalle?: string } | null>(null);
   const [limite, setLimite] = useState(POR_PAGINA);
-  // Lo último que se cargó sigue aquí si sales y regresas (solo en esta pestaña).
-  const crudo = useSyncExternalStore(alMontar, leerCrudo, () => null);
-  const [local, setEstadoRaw] = useState<Estado | null | undefined>(undefined);
-  const estado: Estado | null = useMemo(() => {
-    if (local !== undefined) return local;
-    try {
-      return crudo ? (JSON.parse(crudo) as Estado) : null;
-    } catch {
-      return null;
-    }
-  }, [local, crudo]);
+  const [estado, setEstadoRaw] = useState<Estado | null>(estadoInicial ?? null);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [q, setQ] = useState("");
@@ -56,17 +37,23 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
   const [repensando, startRepensar] = useTransition();
   const input = useRef<HTMLInputElement>(null);
 
-  const setEstado = (f: (e: Estado) => Estado) =>
-    setEstadoRaw((prev) => {
-      const base = prev === undefined ? estado : prev;
-      const n = f(base ?? { registros: [], ideas: [], asignado: {}, agregados: [] });
-      try {
-        sessionStorage.setItem(GUARDADO, JSON.stringify(n));
-      } catch {
-        /* sin almacenamiento */
-      }
-      return n;
-    });
+  const setEstado = (f: (e: Estado) => Estado) => setEstadoRaw((prev) => f(prev ?? { registros: [], ideas: [], asignado: {}, agregados: [] }));
+
+  // Cada cambio queda guardado en la carga (con una pausa corta para juntar varios).
+  const primera = useRef(true);
+  useEffect(() => {
+    if (primera.current) { primera.current = false; return; }
+    if (!carga || !estado) return;
+    const t = setTimeout(() => {
+      void guardarCambiosCarga(carga.id, {
+        ideas: estado.ideas.map((i) => ({ ...i, creando: undefined })),
+        asignado: estado.asignado,
+        agregados: estado.agregados,
+        segmentos: estado.segmentos ?? {},
+      }).then((r) => r?.error && toast(r.error, "error"));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [estado, carga]);
 
   const agregarArchivos = async (fs: FileList | File[]) => {
     const lista = [...fs].filter((f) => f.size < 8_000_000);
@@ -79,13 +66,12 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
     setLeyendo({ hechos: 0, total: 0, fase: "Leyendo…" });
     setSel(new Set());
     try {
-      const res = await fetch("/api/directorio/cargar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto }) });
+      const res = await fetch("/api/directorio/cargar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto, titulo: titulo.trim() || undefined, archivos }) });
       if (!res.ok || !res.body) throw new Error((await res.json().catch(() => null))?.error ?? "No se pudo leer.");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
-      let registros: Registro[] = [];
-      let ideas: Idea[] = [];
+      let destino: number | null = null;
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -100,18 +86,17 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
             setLeyendo({ hechos: 0, total: ev.total, fase: "Leyendo y clasificando…", detalle: ev.negocios ? `${ev.negocios} correos · ${ev.giros} giros` : undefined });
             if (ev.recortado) toast("El archivo es muy grande; se leyó solo la primera parte.", "info");
           } else if (ev.tipo === "progreso") setLeyendo((l) => ({ ...l, hechos: ev.hechos, total: ev.total, fase: "Leyendo y clasificando…" }));
-          else if (ev.tipo === "pensando") setLeyendo((l) => (l ? { ...l, fase: "Pensando ideas de proyecto…" } : l));
-          else if (ev.tipo === "registros") registros = ev.registros;
-          else if (ev.tipo === "ideas") ideas = ev.ideas;
+          else if (ev.tipo === "pensando") setLeyendo((l) => (l ? { ...l, fase: "Pensando ideas y título…" } : l));
+          else if (ev.tipo === "guardado") destino = ev.id;
+          else if (ev.tipo === "vacio") toast("No se encontraron correos en los datos.", "info");
           else if (ev.tipo === "aviso") toast(ev.mensaje, "error");
           else if (ev.tipo === "error") throw new Error(ev.error);
         }
       }
-      setEstado(() => ({ registros, ideas, asignado: Object.fromEntries(registros.map((r) => [r.correo, r.proyecto])), agregados: [] }));
-      if (!registros.length) toast("No se encontraron correos en los datos.", "info");
+      if (destino) return router.push(`/directorio/cargar/${destino}`);
+      setLeyendo(null);
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
       setLeyendo(null);
     }
   };
@@ -218,6 +203,14 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
   if (!estado || !registros.length)
     return (
       <div className="max-w-3xl">
+        <input
+          className="input mb-3 w-full"
+          placeholder="Título (opcional): INEGI Baja California, Hoteles de Oaxaca…"
+          value={titulo}
+          maxLength={120}
+          onChange={(e) => setTitulo(e.target.value)}
+          aria-label="Título de la carga"
+        />
         <div
           onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
           onDragLeave={() => setArrastrando(false)}
@@ -248,16 +241,17 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
 
   return (
     <div className="pb-24">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-2">{registros.length} correos</p>
-        <span className="flex gap-2">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <Link href="/directorio/cargar" className="mb-2 inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink"><ChevronLeft size={15} /> Cargas</Link>
+          {carga && <TituloCarga id={carga.id} inicial={carga.titulo} />}
+          <p className="mt-1 text-sm text-ink-3">
+            {[carga?.fecha, carga?.archivos, `${registros.length} correos`, estado.agregados.length ? `${estado.agregados.length} agregados` : ""].filter(Boolean).join(" · ")}
+          </p>
+        </div>
         <button type="button" className="btn btn-quiet" disabled={repensando} onClick={repensar}>
           {repensando ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} Repensar ideas
         </button>
-        <button type="button" className="btn btn-quiet" onClick={() => { setEstadoRaw(null); try { sessionStorage.removeItem(GUARDADO); } catch {} }}>
-          <Plus size={15} /> Nueva carga
-        </button>
-        </span>
       </div>
 
       {estado.ideas.length > 0 && (
@@ -280,7 +274,7 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
                   ) : destino ? (
                     <>
                       <button type="button" className="btn btn-sm btn-quiet" onClick={() => crear(k)}>Proyecto nuevo</button>
-                      <button type="button" className="btn btn-sm btn-primary" onClick={() => comoSegmento(k)}>Agregar a {destino.nombre}</button>
+                      <button type="button" className="btn btn-sm btn-primary" onClick={() => comoSegmento(k)}>Agregar segmento</button>
                     </>
                   ) : (
                     <button type="button" className="btn btn-sm btn-primary" onClick={() => crear(k)}>Crear</button>
@@ -394,5 +388,28 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
         </div>
       )}
     </div>
+  );
+}
+
+/** Título de la carga; se edita en su lugar y se guarda al salir del campo. */
+function TituloCarga({ id, inicial }: { id: number; inicial: string }) {
+  const [valor, setValor] = useState(inicial);
+  const [guardado, setGuardado] = useState(inicial);
+  const guardar = async () => {
+    const t = valor.trim();
+    if (!t || t === guardado) return setValor(guardado);
+    const r = await guardarCambiosCarga(id, { titulo: t });
+    if (r?.error) { toast(r.error, "error"); setValor(guardado); } else setGuardado(t);
+  };
+  return (
+    <input
+      className="-mx-1 w-full rounded-md border border-transparent bg-transparent px-1 font-serif text-4xl leading-tight tracking-tight outline-none hover:border-line focus:border-line-strong focus:bg-surface"
+      value={valor}
+      maxLength={120}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={guardar}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setValor(guardado); setTimeout(() => (e.target as HTMLInputElement).blur()); } }}
+      aria-label="Título de la carga"
+    />
   );
 }

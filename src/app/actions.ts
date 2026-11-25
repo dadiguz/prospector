@@ -20,7 +20,7 @@ import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
 import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { generarBrochure } from "@/lib/brochure";
-import { FilaImport, agregarSegmento, agruparIdeas, importarFilas, proyectosParaClasificar, type IdeaProyecto, type Registro } from "@/lib/carga";
+import { FilaImport, actualizarCarga, agregarSegmento, agruparIdeas, importarFilas, proyectosParaClasificar, type IdeaProyecto, type Registro } from "@/lib/carga";
 import { generarProyecto } from "@/lib/project-gen";
 import { leerHilo } from "@/lib/gmail/thread";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
@@ -697,6 +697,33 @@ export async function importarCarga(filas: unknown[]): Promise<FormState & { dir
 }
 
 /** Crea un proyecto completo desde una idea (sin pasar por el editor). Tarda alrededor de un minuto. */
+const CambiosCarga = z.object({
+  titulo: z.string().trim().min(1).max(120).optional(),
+  ideas: z.array(z.object({ titulo: z.string(), idea: z.string(), correos: z.array(z.string()), proyecto: z.string().optional(), slug: z.string().optional(), segmento: z.string().optional() })).max(20).optional(),
+  asignado: z.record(z.string(), z.string()).optional(),
+  agregados: z.array(z.string()).optional(),
+  segmentos: z.record(z.string(), z.string()).optional(),
+});
+
+/** Guarda lo que cambia en una carga (proyectos elegidos, ideas, agregados, título). */
+export async function guardarCambiosCarga(id: number, cambios: unknown): Promise<FormState> {
+  requireProfile();
+  const d = CambiosCarga.safeParse(cambios);
+  if (!d.success || !Number.isInteger(id)) return { error: "No se pudo guardar la carga." };
+  actualizarCarga(id, d.data);
+  if (d.data.titulo) refresh();
+  return { ok: true };
+}
+
+/** Quita una carga del historial. Lo que ya se agregó al directorio se queda. */
+export async function eliminarCarga(id: number): Promise<FormState> {
+  requireProfile();
+  if (!Number.isInteger(id)) return { error: "Carga inválida." };
+  run("DELETE FROM cargas WHERE id = ?", id);
+  refresh();
+  return { ok: true };
+}
+
 /** Vuelve a pensar las ideas de proyecto o segmento con los correos que siguen sin proyecto. */
 export async function repensarIdeas(filas: unknown[]): Promise<FormState & { ideas?: IdeaProyecto[] }> {
   requireProfile();

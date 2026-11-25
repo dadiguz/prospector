@@ -389,4 +389,23 @@ UPDATE reply_events SET creado_en = COALESCE(fecha || ' 12:00:00', datetime('now
 ALTER TABLE messages ADD COLUMN seguimiento TEXT;
 `,
   },
+  {
+    id: 8,
+    name: "cargas",
+    sql: /* sql */ `
+CREATE TABLE cargas (
+  id INTEGER PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  archivos TEXT NOT NULL DEFAULT '',
+  total INTEGER NOT NULL DEFAULT 0,
+  registros_json TEXT NOT NULL,
+  ideas_json TEXT NOT NULL DEFAULT '[]',
+  asignado_json TEXT NOT NULL DEFAULT '{}',
+  agregados_json TEXT NOT NULL DEFAULT '[]',
+  segmentos_json TEXT NOT NULL DEFAULT '{}',
+  creado_en TEXT NOT NULL DEFAULT (datetime('now')),
+  actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`,
+  },
 ];
