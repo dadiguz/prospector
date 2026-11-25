@@ -15,11 +15,13 @@ import { domainOf } from "@/lib/text";
 import { saveClient as saveGmailClientImpl, disconnect as gmailDisconnect, GmailNotConnected } from "@/lib/gmail/oauth";
 import * as gmailApi from "@/lib/gmail/api";
 import { syncReplies } from "@/lib/gmail/sync";
-import { importProject, parseMarkdown, cleanDoc, slugify, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
+import { importProject, parseMarkdown, cleanDoc, slugify, emptyDoc, ProjectDocSchema, type ProjectDoc } from "@/lib/project-md";
 import { improveText, CAMPOS, type Campo } from "@/lib/wand";
 import { tagProspect, userTag } from "@/lib/tags";
 import { applyEdits, type Propuesta } from "@/lib/assistant";
 import { generarBrochure } from "@/lib/brochure";
+import { FilaImport, importarFilas } from "@/lib/carga";
+import { generarProyecto } from "@/lib/project-gen";
 import { leerHilo } from "@/lib/gmail/thread";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
@@ -675,6 +677,41 @@ export async function saveProject(doc: ProjectDoc, existingSlug: string | null):
   }
   refresh();
   return { ok: true, message: "Proyecto guardado.", slug: clean.slug };
+}
+
+/** Guarda en el directorio los correos elegidos de una carga y, si traen proyecto, los agrega como prospectos. */
+export async function importarCarga(filas: unknown[]): Promise<FormState & { directorio?: number; prospectos?: number }> {
+  requireProfile();
+  const parsed = z.array(FilaImport).max(2000).safeParse(filas);
+  if (!parsed.success) return { error: "Hay filas con datos inválidos." };
+  const r = importarFilas(parsed.data);
+  audit(readProfile()?.correo ?? "owner", "carga_directorio", `${r.directorio} correos, ${r.prospectos} prospectos`);
+  refresh();
+  return {
+    ok: true,
+    directorio: r.directorio,
+    prospectos: r.prospectos,
+    message: `${r.directorio} al directorio${r.prospectos ? `, ${r.prospectos} a prospectos` : ""}.`,
+    error: r.omitidos.length ? `${r.omitidos.length} omitido(s): ${r.omitidos.slice(0, 4).join(" · ")}${r.omitidos.length > 4 ? " · …" : ""}` : undefined,
+  };
+}
+
+/** Crea un proyecto completo desde una idea (sin pasar por el editor). Tarda alrededor de un minuto. */
+export async function crearProyectoDesdeIdea(idea: string): Promise<FormState & { slug?: string; nombre?: string; icono?: string | null; color?: string | null }> {
+  requireProfile();
+  const texto = z.string().trim().min(10).max(4000).safeParse(idea);
+  if (!texto.success) return { error: "La idea es muy corta." };
+  let doc: ProjectDoc = { ...emptyDoc() };
+  const errores: string[] = [];
+  try {
+    await generarProyecto(texto.data, (_p, data) => { doc = { ...doc, ...data }; }, (p, e) => errores.push(`${p}: ${e instanceof Error ? e.message : String(e)}`));
+  } catch (e) {
+    return { error: e instanceof NoApiKeyError ? e.message : (e as Error).message };
+  }
+  if (!doc.nombre) return { error: `No se pudo generar el proyecto. ${errores.join(" ")}` };
+  const r = await saveProject(doc, null);
+  if (!r?.ok) return { error: r?.error ?? "No se pudo guardar el proyecto." };
+  return { ok: true, slug: r.slug, nombre: doc.nombre, icono: doc.icono ?? null, color: doc.color ?? null, message: `Proyecto "${doc.nombre}" creado.` };
 }
 
 export async function improveField(campo: string, etiqueta: string, valor: string, contexto: string): Promise<{ sugerencia?: string; motivo?: string; error?: string }> {
