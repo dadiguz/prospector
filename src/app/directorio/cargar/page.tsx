@@ -16,7 +16,7 @@ async function Contenido() {
 export default function CargarCorreos() {
   return (
     <>
-      <PageTitle>Cargar correos</PageTitle>
+      <PageTitle>Cargar datos</PageTitle>
       <Suspense fallback={<p className="text-sm text-ink-3">Cargando…</p>}>
         <Contenido />
       </Suspense>

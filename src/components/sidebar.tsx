@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import type { SidebarProject } from "@/lib/queries";
 import { ProjectIcon } from "@/lib/project-icons";
 import { AppLogo } from "./logo";
-import { BookUser, ChevronDown, House, Inbox, LayoutGrid, Menu, Plus, Search, Settings, SlidersHorizontal, SquarePen, Users, Check } from "lucide-react";
+import { BookUser, ChevronDown, Upload, House, Inbox, LayoutGrid, Menu, Plus, Search, Settings, SlidersHorizontal, SquarePen, Users, Check } from "lucide-react";
 
 /* Iconos de línea al estilo de los símbolos del sistema. */
 const ic = { size: 18, strokeWidth: 1.6, "aria-hidden": true } as const;
@@ -19,6 +19,7 @@ const ICON = {
   config: <SlidersHorizontal {...ic} />,
   inicio: <House {...ic} />,
   directorio: <BookUser {...ic} />,
+  cargar: <Upload {...ic} />,
   ajustes: <Settings {...ic} />,
   mas: <Plus {...ic} />,
   menu: <Menu {...ic} />,
@@ -109,8 +110,9 @@ export function Sidebar({ projects }: { projects: SidebarProject[] }) {
         Prospector
       </Link>
 
-      <nav aria-label="Principal">
-        <Item href="/directorio" icon={ICON.directorio} label="Directorio" active={starts("/directorio")} onNavigate={cerrar} />
+      <nav className="space-y-0.5" aria-label="Directorio">
+        <Item href="/directorio" icon={ICON.directorio} label="Directorio" active={is("/directorio")} onNavigate={cerrar} />
+        <Item href="/directorio/cargar" icon={ICON.cargar} label="Cargar datos" active={starts("/directorio/cargar")} onNavigate={cerrar} />
       </nav>
 
       {projects.length > 0 ? (

@@ -10,7 +10,8 @@ import { toast } from "@/components/toaster";
 
 export type ProyectoOpcion = { slug: string; nombre: string; icono: string | null; color: string | null };
 type Idea = IdeaProyecto & { creando?: boolean; slug?: string };
-type Filtro = "todos" | "con" | "sin" | "sin_info" | "existentes";
+type Filtro = "todos" | "con" | "sin" | "sin_info" | "rubro" | "existentes";
+const POR_PAGINA = 100;
 
 const GUARDADO = "carga-directorio";
 const pillCls = (on: boolean) => `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`;
@@ -30,7 +31,8 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
   const [texto, setTexto] = useState("");
   const [archivos, setArchivos] = useState<string[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
-  const [leyendo, setLeyendo] = useState<{ hechos: number; total: number; fase: string } | null>(null);
+  const [leyendo, setLeyendo] = useState<{ hechos: number; total: number; fase: string; detalle?: string } | null>(null);
+  const [limite, setLimite] = useState(POR_PAGINA);
   // Lo último que se cargó sigue aquí si sales y regresas (solo en esta pestaña).
   const crudo = useSyncExternalStore(sinSuscripcion, leerCrudo, () => null);
   const [local, setEstadoRaw] = useState<Estado | null | undefined>(undefined);
@@ -88,9 +90,9 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
           if (!linea.trim()) continue;
           const ev = JSON.parse(linea);
           if (ev.tipo === "inicio") {
-            setLeyendo({ hechos: 0, total: ev.total, fase: "Leyendo y clasificando…" });
+            setLeyendo({ hechos: 0, total: ev.total, fase: "Leyendo y clasificando…", detalle: ev.negocios ? `${ev.negocios} correos · ${ev.giros} giros` : undefined });
             if (ev.recortado) toast("El archivo es muy grande; se leyó solo la primera parte.", "info");
-          } else if (ev.tipo === "progreso") setLeyendo({ hechos: ev.hechos, total: ev.total, fase: "Leyendo y clasificando…" });
+          } else if (ev.tipo === "progreso") setLeyendo((l) => ({ ...l, hechos: ev.hechos, total: ev.total, fase: "Leyendo y clasificando…" }));
           else if (ev.tipo === "pensando") setLeyendo((l) => (l ? { ...l, fase: "Pensando ideas de proyecto…" } : l));
           else if (ev.tipo === "registros") registros = ev.registros;
           else if (ev.tipo === "ideas") ideas = ev.ideas;
@@ -132,8 +134,12 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
   const agregados = new Set(estado?.agregados ?? []);
   const slugs = new Set(proyectos.map((p) => p.slug));
   const deProyecto = (c: string) => (slugs.has(asignado[c]) ? asignado[c] : null);
-  const pasa = (r: Registro, f: Filtro) =>
-    f === "con" ? !!deProyecto(r.correo) : f === "sin" ? asignado[r.correo] === "ninguno" : f === "sin_info" ? asignado[r.correo] === "sin_info" : f === "existentes" ? r.ya_existe : true;
+  const pasa = (r: Registro, f: Filtro) => {
+    const a = asignado[r.correo];
+    if (f === "rubro") return a === "mismo_rubro";
+    if (a === "mismo_rubro") return false; // se apartan de las demás vistas
+    return f === "con" ? !!deProyecto(r.correo) : f === "sin" ? a === "ninguno" : f === "sin_info" ? a === "sin_info" : f === "existentes" ? r.ya_existe : true;
+  };
   const visibles = registros.filter((r) => pasa(r, filtro));
   const elegibles = visibles.filter((r) => !r.rebote && !agregados.has(r.correo));
 
@@ -159,7 +165,7 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
         {leyendo.total > 0 && (
           <>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#f1efe8]"><div className="h-full rounded-full bg-accent transition-all" style={{ width: `${Math.round((leyendo.hechos / leyendo.total) * 100)}%` }} /></div>
-            <p className="mt-2 text-xs text-ink-3">{leyendo.hechos} de {leyendo.total} partes</p>
+            <p className="mt-2 text-xs text-ink-3">{leyendo.detalle ?? `${leyendo.hechos} de ${leyendo.total} partes`}</p>
           </>
         )}
       </div>
@@ -227,8 +233,8 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
       )}
 
       <div className="mb-3 flex flex-wrap gap-1.5">
-        {([["todos", "Todos"], ["con", "Con proyecto"], ["sin", "Sin proyecto"], ["sin_info", "Sin info suficiente"], ["existentes", "Ya en directorio"]] as [Filtro, string][]).map(([k, l]) => (
-          <button key={k} type="button" className={pillCls(filtro === k)} onClick={() => setFiltro(k)}>{l} <span className="text-ink-3">{cuenta(k)}</span></button>
+        {([["todos", "Todos"], ["con", "Con proyecto"], ["sin", "Sin proyecto"], ["sin_info", "Sin info suficiente"], ["existentes", "Ya en directorio"], ["rubro", "Mismo rubro"]] as [Filtro, string][]).map(([k, l]) => (
+          <button key={k} type="button" className={pillCls(filtro === k)} onClick={() => { setFiltro(k); setLimite(POR_PAGINA); }}>{l} <span className="text-ink-3">{cuenta(k)}</span></button>
         ))}
       </div>
 
@@ -246,7 +252,7 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
           <span>Proyecto</span>
         </div>
         <ul className="divide-y divide-line">
-          {visibles.map((r) => {
+          {visibles.slice(0, limite).map((r) => {
             const hecho = agregados.has(r.correo);
             const bloqueado = r.rebote || hecho;
             return (
@@ -284,12 +290,18 @@ export function Cargar({ proyectos: inicial }: { proyectos: ProyectoOpcion[] }) 
                     {proyectos.map((p) => <option key={p.slug} value={p.slug}>{p.nombre}</option>)}
                     <option value="ninguno">Sin proyecto</option>
                     <option value="sin_info">Sin info suficiente</option>
+                    <option value="mismo_rubro">Mismo rubro</option>
                   </select>
                 </span>
               </li>
             );
           })}
         </ul>
+        {visibles.length > limite && (
+          <button type="button" className="block w-full border-t border-line py-2.5 text-sm text-ink-2 hover:bg-[#faf9f5]" onClick={() => setLimite((l) => l + POR_PAGINA)}>
+            Mostrar más <span className="text-ink-3">{visibles.length - limite}</span>
+          </button>
+        )}
       </div>
 
       {sel.size > 0 && (
