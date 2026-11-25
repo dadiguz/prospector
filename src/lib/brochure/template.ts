@@ -105,7 +105,7 @@ export function renderBrochure(doc: BrochureDoc & { _dominio?: string }, fotos: 
   const unidadCel = (it: (typeof items)[number], on: boolean, tag?: string) =>
     it.nombre
       ? `<div class="unit${on ? " on" : ""}"><div class="thumb" style="${miniatura(it.foto)}"></div><div class="tx"><b>${esc(it.nombre)}${tag ? ` <span class="tag">${tag}</span>` : ""}</b><span>${esc(it.detalle)}</span></div>${
-          it.precio ? `<div class="pr">${precioTxt(it)}<small>${esc(it.por)}</small></div>` : `<div class="pr" style="font-size:14px;color:var(--green-2)">Ver ›</div>`
+          it.precio ? `<div class="pr">${precioTxt(it)}<small>${esc(it.por)}</small></div>` : `<div class="pr" style="font-size:13px;color:var(--ink-3)">Su precio</div>`
         }</div>`
       : "";
 
@@ -119,7 +119,7 @@ export function renderBrochure(doc: BrochureDoc & { _dominio?: string }, fotos: 
   const etiquetaWeb = ["Quedan 3", "", "Quedan 1", "Lleno"];
   const unidadWeb = (it: (typeof items)[number], k: number) =>
     it.nombre
-      ? `<div class="wu${k === 0 ? " on" : ""}"><div class="ph" style="${miniatura(it.foto)}">${etiquetaWeb[k] ? `<em${k === 3 ? ' class="full"' : ""}>${etiquetaWeb[k]}</em>` : ""}</div><div class="in"><b>${esc(it.nombre)}</b><small>${esc(it.detalle)}</small><div class="row"><strong>${it.precio ? `${precioTxt(it)}<small> ${esc(it.por)}</small>` : "Consultar"}</strong><span>${estadoWeb[k]}</span></div></div></div>`
+      ? `<div class="wu${k === 0 ? " on" : ""}"><div class="ph" style="${miniatura(it.foto)}">${etiquetaWeb[k] ? `<em${k === 3 ? ' class="full"' : ""}>${etiquetaWeb[k]}</em>` : ""}</div><div class="in"><b>${esc(it.nombre)}</b><small>${esc(it.detalle)}</small><div class="row"><strong>${it.precio ? `${precioTxt(it)}<small> ${esc(it.por)}</small>` : '<span style="font-weight:600;color:var(--ink-3)">Su precio</span>'}</strong><span>${estadoWeb[k]}</span></div></div></div>`
       : "";
 
   const qr = (() => {
@@ -135,8 +135,11 @@ export function renderBrochure(doc: BrochureDoc & { _dominio?: string }, fotos: 
   })();
 
   const lugar = doc.lugar ? ` · ${esc(doc.lugar)}` : "";
-  const totalTxt = total ? dinero(total) : "—";
-  const anticipoTxt = anticipo ? dinero(anticipo) : "—";
+  // Sin precios publicados no se inventan: se deja el lugar de su tarifa.
+  const conPrecios = items.some((it) => it.precio);
+  const totalTxt = total ? dinero(total) : "Su tarifa";
+  const anticipoTxt = anticipo ? dinero(anticipo) : "Su anticipo";
+  const notaPrecios = conPrecios ? "Pantalla de ejemplo con los precios de su sitio" : "Pantalla de ejemplo; se carga con sus precios";
   const restoTxt = total && anticipo && total !== anticipo ? dinero(total - anticipo) : null;
   const concepto = `${esc(prin.nombre)} · ${cantidad} ${porNoche ? "noches" : esc(cat.unidad_fecha || "")}`.trim();
   const strip = doc.cambio.fotos.filter((f) => foto(f.foto)).slice(0, 3);
@@ -201,7 +204,7 @@ export function renderBrochure(doc: BrochureDoc & { _dominio?: string }, fotos: 
     <div><b>Disponibilidad real</b>Nadie aparta algo que ya está ocupado.</div>
     <div><b>En computadora y celular</b>Desde donde los busquen.</div>
   </div>
-  ${pie("03", "Pantalla de ejemplo con los precios de su sitio")}
+  ${pie("03", notaPrecios)}
 </section>
 
 <section class="page" id="p4">${encabezado("Lo que ve su cliente", `Elige, paga y listo`)}
@@ -232,7 +235,7 @@ export function renderBrochure(doc: BrochureDoc & { _dominio?: string }, fotos: 
       </div>
     </div></div>
   </div>
-  ${pie("04", "Pantallas de ejemplo con los precios de su sitio")}
+  ${pie("04", notaPrecios.replace("Pantalla", "Pantallas"))}
 </section>
 
 <section class="page" id="p5">${encabezado("Lo que ven ustedes", doc.panel.titulo)}
