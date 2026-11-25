@@ -7,13 +7,22 @@ import type { Issue } from "@/lib/validator";
 import { Info } from "@/components/info";
 import { SendingModal } from "./sending";
 import { ARREGLOS_AUTO } from "@/lib/fix-labels";
-import { CircleX, TriangleAlert } from "lucide-react";
+import { CircleX, Layers, TriangleAlert } from "lucide-react";
+import type { Lote } from "@/lib/lotes";
+import { TandaPanel, TandasBar, imgUrl, type Vista } from "./tandas";
 
-type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[]; nuevo?: boolean };
+type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[]; nuevo?: boolean; loteId: number | null };
 
-export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remitente: string; gmailConectado: boolean; etiqueta: string; tope: number; enviadosHoy: number }) {
-  const { drafts } = props;
-  const listos = drafts.filter((d) => !d.issues.some((i) => i.nivel === "error") && d.para);
+export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remitente: string; gmailConectado: boolean; etiqueta: string; tope: number; enviadosHoy: number; lotes: Lote[] }) {
+  const todos = props.drafts;
+  const esListo = (d: Draft) => !d.issues.some((i) => i.nivel === "error") && !!d.para;
+  const [vistaElegida, setVista] = useState<Vista>("todos");
+  const lotePorId = new Map(props.lotes.map((l) => [l.id, l]));
+  // Si la tanda elegida ya no tiene borradores (se mandó o se deshizo), se regresa a todos.
+  const vista: Vista = typeof vistaElegida === "number" && !todos.some((d) => d.loteId === vistaElegida) ? "todos" : vistaElegida;
+  const drafts = todos.filter((d) => (vista === "todos" ? true : vista === "sin" ? !d.loteId : d.loteId === vista));
+  const loteActual = typeof vista === "number" ? lotePorId.get(vista) : undefined;
+  const listos = drafts.filter(esListo);
   const [sel, setSel] = useState<number[]>([]);
   const [confirming, setConfirming] = useState(false);
   // Correos que se están enviando (el modal guarda su propia lista: la pantalla se refresca mientras tanto).
@@ -45,6 +54,26 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
           </button>
         </div>
       </div>
+
+      <TandasBar
+        projectId={props.projectId}
+        lotes={props.lotes}
+        vista={vista}
+        setVista={(v) => { setVista(v); setSel([]); }}
+        total={todos.length}
+        sinTanda={todos.filter((d) => !d.loteId).length}
+        listosSinTanda={todos.filter((d) => !d.loteId && esListo(d)).map((d) => d.id)}
+      />
+
+      {loteActual && (
+        <TandaPanel
+          key={loteActual.id}
+          lote={loteActual}
+          listos={listos.length}
+          puedeElegir={restantes}
+          onElegir={() => setSel(listos.map((d) => d.id).slice(0, restantes))}
+        />
+      )}
 
       <Problems projectId={props.projectId} drafts={drafts} />
 
@@ -103,7 +132,7 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
 
       <ul className="space-y-4">
         {drafts.map((d) => (
-          <DraftCard key={d.id} d={d} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
+          <DraftCard key={d.id} d={d} lote={d.loteId ? lotePorId.get(d.loteId) : undefined} mostrarTanda={vista === "todos"} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
         ))}
       </ul>
     </>
@@ -111,7 +140,7 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
 }
 
 
-function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean; selected: boolean; onToggle: () => void }) {
+function DraftCard({ d, lote, mostrarTanda, gmail, selected, onToggle }: { d: Draft; lote?: Lote; mostrarTanda: boolean; gmail: boolean; selected: boolean; onToggle: () => void }) {
   const [editing, setEditing] = useState(false);
   const errors = d.issues.filter((i) => i.nivel === "error");
   const warns = d.issues.filter((i) => i.nivel === "aviso");
@@ -124,6 +153,7 @@ function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean;
             <span className="flex items-center gap-2 font-medium">
               {d.nombre}
               {d.nuevo && <span className="rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nuevo</span>}
+              {lote && mostrarTanda && <span className="inline-flex items-center gap-1 rounded-full bg-[#efede5] px-1.5 text-[11px] font-normal text-ink-2"><Layers size={11} className="text-accent" />{lote.nombre}</span>}
             </span>
             <span className="block font-mono text-xs text-ink-2">{d.para ?? "sin destinatario"}</span>
           </span>
@@ -177,6 +207,14 @@ function DraftCard({ d, gmail, selected, onToggle }: { d: Draft; gmail: boolean;
         <div className="mt-4 rounded-lg border border-line bg-bg px-4 py-3">
           <p className="text-sm font-medium">{d.asunto}</p>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{d.cuerpo}</p>
+          {lote && lote.imagenes.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {lote.imagenes.map((i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i.archivo} src={imgUrl(lote.id, i.archivo)} alt={i.nombre} className="max-h-40 rounded-md border border-line" loading="lazy" />
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="mt-3 flex flex-wrap justify-end gap-1 text-xs">

@@ -408,4 +408,18 @@ CREATE TABLE cargas (
 );
 `,
   },
+  {
+    id: 9,
+    name: "lotes",
+    sql: /* sql */ `
+CREATE TABLE lotes (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  imagenes_json TEXT NOT NULL DEFAULT '[]',
+  creado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+ALTER TABLE messages ADD COLUMN lote_id INTEGER REFERENCES lotes(id);
+`,
+  },
 ];

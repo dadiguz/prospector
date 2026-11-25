@@ -78,17 +78,19 @@ export async function priorThread(email: string): Promise<string | null> {
   return r.messages?.[0]?.threadId ?? null;
 }
 
-export async function createDraft(o: { to: string; subject: string; body: string; fromName: string; labelName?: string; threadId?: string; inReplyTo?: string; cc?: string }) {
+type Imagen = { cid: string; filename: string; mime: string; data: Buffer };
+
+export async function createDraft(o: { to: string; subject: string; body: string; fromName: string; labelName?: string; threadId?: string; inReplyTo?: string; cc?: string; images?: Imagen[] }) {
   const from = await account();
-  const raw = buildMime({ from, fromName: o.fromName, to: o.to, cc: o.cc, subject: o.subject, body: o.body, signatureHtml: await signature(), inReplyTo: o.inReplyTo, references: o.inReplyTo });
+  const raw = buildMime({ from, fromName: o.fromName, to: o.to, cc: o.cc, subject: o.subject, body: o.body, signatureHtml: await signature(), inReplyTo: o.inReplyTo, references: o.inReplyTo, images: o.images });
   const d = await gmail<{ id: string; message: { id: string; threadId: string } }>("/drafts", { json: { message: { raw, ...(o.threadId ? { threadId: o.threadId } : {}) } } });
   if (o.labelName) await gmail(`/messages/${d.message.id}/modify`, { json: { addLabelIds: [await ensureLabel(o.labelName)] } });
   return { draftId: d.id, messageId: d.message.id, threadId: d.message.threadId };
 }
 
-export async function updateDraft(draftId: string, o: { to: string; subject: string; body: string; fromName: string; threadId?: string }) {
+export async function updateDraft(draftId: string, o: { to: string; subject: string; body: string; fromName: string; threadId?: string; images?: Imagen[] }) {
   const from = await account();
-  const raw = buildMime({ from, fromName: o.fromName, to: o.to, subject: o.subject, body: o.body, signatureHtml: await signature() });
+  const raw = buildMime({ from, fromName: o.fromName, to: o.to, subject: o.subject, body: o.body, signatureHtml: await signature(), images: o.images });
   const d = await gmail<{ id: string; message: { id: string; threadId: string } }>(`/drafts/${draftId}`, {
     method: "PUT",
     json: { id: draftId, message: { raw, ...(o.threadId ? { threadId: o.threadId } : {}) } },

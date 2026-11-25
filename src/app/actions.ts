@@ -23,6 +23,7 @@ import { generarBrochure } from "@/lib/brochure";
 import { FilaImport, actualizarCarga, agregarSegmento, agruparIdeas, importarFilas, proyectosParaClasificar, type IdeaProyecto, type Registro } from "@/lib/carga";
 import { generarProyecto } from "@/lib/project-gen";
 import { leerHilo } from "@/lib/gmail/thread";
+import { armarLote, cambiarLote, deshacerLote, imagenesDeMensaje, nombreLoteDeMensaje, quitarImagen, renombrarLote } from "@/lib/lotes";
 import { startSearchJob, repeatSearchJob, cancelJob as cancelJobImpl, type CanalBusqueda } from "@/lib/search/engine";
 
 export type FormState = { ok?: boolean; error?: string; message?: string; fields?: Record<string, string>; detener?: boolean } | null;
@@ -204,7 +205,7 @@ export async function markSent(projectId: number, messageIds: number[]): Promise
   const tanda = `Tanda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`;
   tx(() => {
     for (const r of rows) {
-      run("UPDATE messages SET estado = 'enviado', enviado_en = datetime('now','localtime'), aprobado_por = ?, tanda = ? WHERE id = ?", profile.correo, tanda, r.id);
+      run("UPDATE messages SET estado = 'enviado', enviado_en = datetime('now','localtime'), aprobado_por = ?, tanda = ? WHERE id = ?", profile.correo, nombreLoteDeMensaje(r.id) ?? tanda, r.id);
       run("UPDATE prospects SET estado = 'enviado', actualizado_en = datetime('now') WHERE id = ?", r.prospect_id);
     }
     audit(profile.correo, "marcar_enviados", `${rows.length} correos: ${rows.map((r) => r.para).join(", ")}`);
@@ -496,11 +497,11 @@ const gmailLabel = (projectId: number) => {
 
 async function upsertGmailDraft(r: BatchRow, fromName: string, label: string): Promise<string> {
   if (r.gmail_draft_id && (await gmailApi.draftExists(r.gmail_draft_id))) {
-    const d = await gmailApi.updateDraft(r.gmail_draft_id, { to: r.para, subject: r.asunto, body: r.cuerpo, fromName });
+    const d = await gmailApi.updateDraft(r.gmail_draft_id, { to: r.para, subject: r.asunto, body: r.cuerpo, fromName, images: imagenesDeMensaje(r.id) });
     run("UPDATE messages SET gmail_message_id = ?, gmail_thread_id = ? WHERE id = ?", d.messageId, d.threadId, r.id);
     return d.draftId;
   }
-  const d = await gmailApi.createDraft({ to: r.para, subject: r.asunto, body: r.cuerpo, fromName, labelName: label });
+  const d = await gmailApi.createDraft({ to: r.para, subject: r.asunto, body: r.cuerpo, fromName, labelName: label, images: imagenesDeMensaje(r.id) });
   run("UPDATE messages SET gmail_draft_id = ?, gmail_message_id = ?, gmail_thread_id = ? WHERE id = ?", d.draftId, d.messageId, d.threadId, r.id);
   return d.draftId;
 }
@@ -561,7 +562,7 @@ export async function sendViaGmail(projectId: number, messageIds: number[], opts
       const s = await gmailApi.sendDraft(draftId, label);
       run(
         "UPDATE messages SET estado = 'enviado', enviado_en = datetime('now','localtime'), aprobado_por = ?, tanda = ?, gmail_message_id = ?, gmail_thread_id = ? WHERE id = ?",
-        from, tanda, s.messageId, s.threadId, r.id,
+        from, nombreLoteDeMensaje(r.id) ?? tanda, s.messageId, s.threadId, r.id,
       );
       run("UPDATE prospects SET estado = 'enviado', actualizado_en = datetime('now') WHERE id = ?", r.prospect_id);
       audit(from, "correo_enviado", `${r.para} · ${r.asunto}`);
@@ -591,7 +592,7 @@ export async function sendTestToMe(messageId: number): Promise<FormState> {
   if (!m) return { error: "Borrador no encontrado." };
   try {
     const me = await gmailApi.account();
-    const d = await gmailApi.createDraft({ to: me, subject: `[Prueba] ${m.asunto}`, body: m.cuerpo, fromName: profile.nombre });
+    const d = await gmailApi.createDraft({ to: me, subject: `[Prueba] ${m.asunto}`, body: m.cuerpo, fromName: profile.nombre, images: imagenesDeMensaje(messageId) });
     const s = await gmailApi.sendDraft(d.draftId);
     const v = await gmailApi.verifySent(s.messageId, Boolean(await gmailApi.signature()));
     return { ok: true, message: `Prueba enviada a ${me}. ${v.ok ? "Salió limpia." : v.problemas.join("; ")}` };
@@ -780,6 +781,60 @@ export async function improveField(campo: string, etiqueta: string, valor: strin
   } catch (e) {
     if (e instanceof NoApiKeyError) return { error: "Agrega tu API key de Claude en Ajustes para usar la varita." };
     return { error: `No se pudo mejorar: ${(e as Error).message}` };
+  }
+}
+
+/* ---------- Tandas de borradores ---------- */
+
+/** Arma una tanda con los borradores que eligió la pantalla (los siguientes N sin tanda). */
+export async function armarTanda(projectId: number, ids: number[]): Promise<FormState & { loteId?: number }> {
+  requireProfile();
+  const d = z.array(z.number().int()).min(1).max(500).safeParse(ids);
+  if (!d.success) return { error: "No hay borradores para la tanda." };
+  const r = armarLote(projectId, d.data);
+  if (!r.n) return { error: "Esos borradores ya están en una tanda." };
+  refresh();
+  return { ok: true, loteId: r.id, message: `${r.nombre}: ${r.n} borrador(es).` };
+}
+
+export async function deshacerTanda(loteId: number): Promise<FormState> {
+  requireProfile();
+  deshacerLote(z.number().int().parse(loteId));
+  refresh();
+  return { ok: true };
+}
+
+export async function renombrarTanda(loteId: number, nombre: string): Promise<FormState> {
+  requireProfile();
+  const n = z.string().trim().min(1).max(80).safeParse(nombre);
+  if (!n.success) return { error: "Escribe un nombre." };
+  renombrarLote(z.number().int().parse(loteId), n.data);
+  refresh();
+  return { ok: true };
+}
+
+export async function quitarImagenTanda(loteId: number, archivo: string): Promise<FormState> {
+  requireProfile();
+  quitarImagen(z.number().int().parse(loteId), z.string().max(60).parse(archivo));
+  refresh();
+  return { ok: true };
+}
+
+/** Aplica la misma indicación a todos los borradores de la tanda (el validador vuelve a revisar cada uno). */
+export async function cambiarTanda(loteId: number, indicacion: string): Promise<FormState> {
+  requireProfile();
+  const t = z.string().trim().min(3).max(1000).safeParse(indicacion);
+  if (!t.success) return { error: "Escribe qué quieres cambiar." };
+  try {
+    const r = await cambiarLote(z.number().int().parse(loteId), t.data);
+    refresh();
+    return {
+      ok: r.cambiados > 0,
+      message: r.cambiados ? `${r.cambiados} borrador(es) cambiados.` : undefined,
+      error: r.fallidos.length ? `${r.fallidos.length} sin cambiar: ${r.fallidos.slice(0, 3).join(" · ")}` : undefined,
+    };
+  } catch (e) {
+    return { error: e instanceof NoApiKeyError ? e.message : (e as Error).message };
   }
 }
 

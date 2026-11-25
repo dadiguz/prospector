@@ -120,12 +120,12 @@ export async function prospectEvidence(prospectId: number) {
 
 export type DraftRow = {
   id: number; prospect_id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; estado: string;
-  validacion_json: string; score: number | null; ficha_json: string; creado_en: string;
+  validacion_json: string; score: number | null; ficha_json: string; creado_en: string; lote_id: number | null;
 };
 export async function listDrafts(projectId: number, tag: number | null = null) {
   await io();
   const drafts = all<DraftRow>(
-    `SELECT m.id, m.prospect_id, o.nombre, m.para, m.asunto, m.cuerpo, m.estado, m.validacion_json, p.score, p.ficha_json, m.creado_en
+    `SELECT m.id, m.prospect_id, o.nombre, m.para, m.asunto, m.cuerpo, m.estado, m.validacion_json, p.score, p.ficha_json, m.creado_en, m.lote_id
      FROM messages m JOIN prospects p ON p.id = m.prospect_id JOIN organizations o ON o.id = p.organization_id
      WHERE p.project_id = ? AND m.estado IN ('borrador','aprobado') AND m.direccion = 'salida' AND ${tagFilterSql("p.id")}
      ORDER BY m.estado = 'aprobado' DESC, p.score DESC, m.id`,

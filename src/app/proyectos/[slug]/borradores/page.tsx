@@ -11,6 +11,7 @@ import { DraftsBoard } from "./board";
 import { SearchBox } from "@/components/search-box";
 import { coincide } from "@/lib/text";
 import { gmailStatus } from "@/lib/gmail/oauth";
+import { lotesDelProyecto } from "@/lib/lotes";
 
 async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos/[slug]/borradores">) {
   const { slug } = await params;
@@ -59,8 +60,10 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
               cuando: typeof f.cuando_mandar === "string" ? f.cuando_mandar : null,
               tags: tagMap.get(d.prospect_id) ?? [],
               nuevo: esNuevo(d.creado_en, desde),
+              loteId: d.lote_id,
             };
           })}
+          lotes={lotesDelProyecto(project.id)}
           remitente={gmail.conectado ? gmail.email ?? "" : profile?.correo ?? ""}
           gmailConectado={gmail.conectado}
           etiqueta={cfg.gmail?.etiqueta ?? `Prospección/${project.nombre}`}
