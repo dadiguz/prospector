@@ -12,7 +12,16 @@ import { dataDir } from "./paths";
  * - los archivos de la carpeta de datos (ajustes, perfil, marca, brochures).
  * Nunca incluye secretos (llavero, archivo cifrado, sal) ni los logs.
  */
-const NO_EXPORTAR = new Set(["secretos.enc.json", ".sal", "logs", "prospector.db", "prospector.db-wal", "prospector.db-shm"]);
+export const NO_EXPORTAR = new Set([
+  "secretos.enc.json",
+  ".sal",
+  "logs",
+  "respaldos",
+  "prospector.db",
+  "prospector.db-wal",
+  "prospector.db-shm",
+  "prospector.db.importando",
+]);
 
 type Entrada = { nombre: string; datos: Buffer };
 

@@ -1,7 +1,10 @@
 "use client";
 
 import { removeApiKey, saveApiKey, saveSettings, saveGmailClient } from "@/app/actions";
+import { useRef, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Info } from "@/components/info";
+import { toast } from "@/components/toaster";
 import { ActionButton, FormMessage, StatefulForm } from "@/components/client";
 import type { Settings } from "@/lib/profile";
 
@@ -84,5 +87,43 @@ export function GmailClientForm() {
         </>
       )}
     </StatefulForm>
+  );
+}
+
+export function DatosButtons() {
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [pending, start] = useTransition();
+  return (
+    <span className="flex gap-2">
+      <input
+        ref={input}
+        type="file"
+        accept=".zip,application/zip"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          if (!window.confirm(`¿Reemplazar todos tus datos con “${f.name}”? Lo actual se guarda antes en respaldos.`)) return;
+          start(async () => {
+            const fd = new FormData();
+            fd.append("archivo", f);
+            const r = await fetch("/api/importar", { method: "POST", body: fd })
+              .then((x) => x.json())
+              .catch(() => ({ error: "No se pudo subir el archivo." }));
+            if (r.error) toast(r.error, "error");
+            else {
+              toast(`Importado: ${r.prospectos} prospectos`);
+              router.refresh();
+            }
+          });
+        }}
+      />
+      <button type="button" className="btn btn-quiet" disabled={pending} onClick={() => input.current?.click()}>
+        {pending ? "Importando…" : "Importar"}
+      </button>
+      <a href="/api/exportar" download className="btn">Exportar todo</a>
+    </span>
   );
 }

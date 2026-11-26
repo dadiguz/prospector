@@ -6,7 +6,7 @@ import { dataDir } from "@/lib/paths";
 import { all } from "@/lib/db";
 import { PageTitle, Section, Badge, Fold } from "@/components/ui";
 import { ProfileForm } from "./profile-form";
-import { ApiKeyForm, SettingsForm, GmailClientForm } from "./forms";
+import { ApiKeyForm, SettingsForm, GmailClientForm, DatosButtons } from "./forms";
 import { gmailStatus } from "@/lib/gmail/oauth";
 import { ActionButton } from "@/components/client";
 import { disconnectGmail } from "@/app/actions";
@@ -102,7 +102,7 @@ async function AjustesContent({ searchParams }: PageProps<"/ajustes">) {
           </table>
         )}
       </Fold>
-      <Section title="Mis datos" aside={<a href="/api/exportar" download className="btn">Exportar todo</a>}>
+      <Section title="Mis datos" aside={<DatosButtons />}>
         <p className="text-sm text-ink-2">
           <code className="font-mono text-xs">{dataDir()}</code>
         </p>

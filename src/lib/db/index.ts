@@ -39,6 +39,13 @@ export function db(): Db {
   return g.__prospectorDb;
 }
 
+/** Cierra la conexión (para reemplazar el archivo de la base); la siguiente llamada a db() la reabre y migra. */
+export function closeDb() {
+  g.__prospectorDb?.close();
+  g.__prospectorDb = undefined;
+  g.__prospectorMigrated = undefined;
+}
+
 export function tx<T>(fn: () => T): T {
   const d = db();
   d.exec("BEGIN");
