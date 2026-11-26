@@ -18,8 +18,8 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
   const esListo = (d: Draft) => !d.issues.some((i) => i.nivel === "error") && !!d.para;
   const [vistaElegida, setVista] = useState<Vista>("todos");
   const lotePorId = new Map(props.lotes.map((l) => [l.id, l]));
-  // Si la tanda elegida ya no tiene borradores (se mandó o se deshizo), se regresa a todos.
-  const vista: Vista = typeof vistaElegida === "number" && !todos.some((d) => d.loteId === vistaElegida) ? "todos" : vistaElegida;
+  // Si la tanda elegida ya no existe (se deshizo), se regresa a todos.
+  const vista: Vista = typeof vistaElegida === "number" && !lotePorId.has(vistaElegida) ? "todos" : vistaElegida;
   const drafts = todos.filter((d) => (vista === "todos" ? true : vista === "sin" ? !d.loteId : d.loteId === vista));
   const loteActual = typeof vista === "number" ? lotePorId.get(vista) : undefined;
   const listos = drafts.filter(esListo);
@@ -39,7 +39,17 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
 
   return (
     <>
-      <div className="card mb-6 flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm">
+      <TandasBar
+        projectId={props.projectId}
+        lotes={props.lotes}
+        vista={vista}
+        setVista={(v) => { setVista(v); setSel([]); }}
+        total={todos.length}
+        sinTanda={todos.filter((d) => !d.loteId).length}
+        listosSinTanda={todos.filter((d) => !d.loteId && esListo(d)).map((d) => d.id)}
+      />
+
+      {drafts.length > 0 && <div className="card mb-6 flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm">
         <span className="flex items-center gap-2 text-ink-2">
           <span><strong className="font-medium text-ink">{listos.length}</strong> de {drafts.length} listos para mandar</span>
           <Info label="Envíos de hoy">Hoy llevas {props.enviadosHoy} envíos. Un borrador está listo si tiene destinatario y no tiene errores.</Info>
@@ -52,19 +62,10 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
             Mandar {sel.length || ""}
           </button>
         </div>
-      </div>
+      </div>}
 
-      <TandasBar
-        projectId={props.projectId}
-        lotes={props.lotes}
-        vista={vista}
-        setVista={(v) => { setVista(v); setSel([]); }}
-        total={todos.length}
-        sinTanda={todos.filter((d) => !d.loteId).length}
-        listosSinTanda={todos.filter((d) => !d.loteId && esListo(d)).map((d) => d.id)}
-      />
 
-      {loteActual && (
+      {loteActual && loteActual.borradores > 0 && (
         <TandaPanel
           key={loteActual.id}
           lote={loteActual}
@@ -128,9 +129,15 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
         />
       )}
 
+      {!drafts.length && (
+        <p className="card px-5 py-8 text-center text-sm text-ink-3">
+          {loteActual?.enviados ? `${loteActual.nombre} ya se mandó: ${loteActual.enviados} enviados.` : "No hay borradores aquí."}
+        </p>
+      )}
+
       <ul className="space-y-4">
         {drafts.map((d) => (
-          <DraftCard key={d.id} d={d} lote={d.loteId ? lotePorId.get(d.loteId) : undefined} mostrarTanda={vista === "todos"} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
+          <DraftCard key={d.id} d={d} lote={d.loteId ? lotePorId.get(d.loteId) : undefined} mostrarTanda={vista === "todos"} verTanda={(id) => { setVista(id); setSel([]); }} gmail={props.gmailConectado} selected={sel.includes(d.id)} onToggle={() => setSel((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))} />
         ))}
       </ul>
     </>
@@ -138,7 +145,7 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
 }
 
 
-function DraftCard({ d, lote, mostrarTanda, gmail, selected, onToggle }: { d: Draft; lote?: Lote; mostrarTanda: boolean; gmail: boolean; selected: boolean; onToggle: () => void }) {
+function DraftCard({ d, lote, mostrarTanda, verTanda, gmail, selected, onToggle }: { d: Draft; lote?: Lote; mostrarTanda: boolean; verTanda: (id: number) => void; gmail: boolean; selected: boolean; onToggle: () => void }) {
   const [editing, setEditing] = useState(false);
   const errors = d.issues.filter((i) => i.nivel === "error");
   const warns = d.issues.filter((i) => i.nivel === "aviso");
@@ -151,7 +158,11 @@ function DraftCard({ d, lote, mostrarTanda, gmail, selected, onToggle }: { d: Dr
             <span className="flex items-center gap-2 font-medium">
               {d.nombre}
               {d.nuevo && <span className="rounded-full bg-accent px-1.5 text-[10px] font-medium uppercase tracking-wide text-white">Nuevo</span>}
-              {lote && mostrarTanda && <span className="inline-flex items-center gap-1 rounded-full bg-[#efede5] px-1.5 text-[11px] font-normal text-ink-2"><Layers size={11} className="text-accent" />{lote.nombre}</span>}
+              {lote && mostrarTanda && (
+                <button type="button" onClick={(e) => { e.preventDefault(); verTanda(lote.id); }} className="inline-flex items-center gap-1 rounded-full bg-[#efede5] px-1.5 text-[11px] font-normal text-ink-2 hover:bg-[#e6e3d8]" title={`Ver ${lote.nombre}`}>
+                  <Layers size={11} className="text-accent" />{lote.nombre}
+                </button>
+              )}
             </span>
             <span className="block font-mono text-xs text-ink-2">{d.para ?? "sin destinatario"}</span>
           </span>

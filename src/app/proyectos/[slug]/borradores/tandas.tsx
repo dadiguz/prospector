@@ -2,14 +2,14 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, ImagePlus, Layers, LoaderCircle, X } from "lucide-react";
+import { ArrowUp, Check, ImagePlus, Layers, LoaderCircle, X } from "lucide-react";
 import { armarTanda, cambiarTanda, deshacerTanda, quitarImagenTanda, renombrarTanda } from "@/app/actions";
 import { toast } from "@/components/toaster";
 import type { Lote } from "@/lib/lotes";
 
 export type Vista = "todos" | "sin" | number;
 
-const pillCls = (on: boolean) => `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-ink bg-surface text-ink" : "border-line-strong text-ink-2 hover:bg-[#efede5]"}`;
+const tabCls = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm ${on ? "bg-surface font-medium text-ink shadow-sm ring-1 ring-line" : "text-ink-2 hover:text-ink"}`;
 export const imgUrl = (loteId: number, archivo: string) => `/api/lotes/${loteId}/${archivo}`;
 
 /** Filtro por tanda y el control para armar la siguiente tanda de N. */
@@ -18,7 +18,6 @@ export function TandasBar({
 }: { projectId: number; lotes: Lote[]; vista: Vista; setVista: (v: Vista) => void; total: number; sinTanda: number; listosSinTanda: number[] }) {
   const [tam, setTam] = useState(10);
   const [pending, start] = useTransition();
-  const activos = lotes.filter((l) => l.borradores > 0);
   const armar = () =>
     start(async () => {
       const r = await armarTanda(projectId, listosSinTanda.slice(0, tam));
@@ -29,21 +28,27 @@ export function TandasBar({
       }
     });
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button type="button" className={pillCls(vista === "todos")} onClick={() => setVista("todos")}>Todos <span className="text-ink-3">{total}</span></button>
-        {activos.length > 0 && (
-          <button type="button" className={pillCls(vista === "sin")} onClick={() => setVista("sin")}>Sin tanda <span className="text-ink-3">{sinTanda}</span></button>
-        )}
-        {activos.map((l) => (
-          <button key={l.id} type="button" className={pillCls(vista === l.id)} onClick={() => setVista(l.id)}>
-            <Layers size={12} className="text-accent" /> {l.nombre} <span className="text-ink-3">{l.borradores}</span>
+    <nav className="mb-5 flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-line pb-3" aria-label="Tandas">
+      <button type="button" className={tabCls(vista === "todos")} aria-current={vista === "todos" ? "page" : undefined} onClick={() => setVista("todos")}>
+        Todos <span className="text-ink-3">{total}</span>
+      </button>
+      {lotes.length > 0 && (
+        <button type="button" className={tabCls(vista === "sin")} aria-current={vista === "sin" ? "page" : undefined} onClick={() => setVista("sin")}>
+          Sin tanda <span className="text-ink-3">{sinTanda}</span>
+        </button>
+      )}
+      {lotes.map((l) => {
+        const enviada = l.borradores === 0 && l.enviados > 0;
+        return (
+          <button key={l.id} type="button" className={tabCls(vista === l.id)} aria-current={vista === l.id ? "page" : undefined} onClick={() => setVista(l.id)} title={enviada ? `${l.enviados} enviados` : undefined}>
+            <Layers size={13} className={enviada ? "text-ink-3" : "text-accent"} /> {l.nombre}
+            {enviada ? <Check size={13} className="text-ok" aria-label="Enviada" /> : <span className="text-ink-3">{l.borradores}</span>}
             {l.imagenes.length > 0 && <ImagePlus size={12} className="text-ink-3" aria-label="Con imágenes" />}
           </button>
-        ))}
-      </div>
+        );
+      })}
       {listosSinTanda.length > 0 && (
-        <div className="flex items-center gap-2 text-sm text-ink-2">
+        <div className="ml-auto flex items-center gap-2 text-sm text-ink-2">
           <span>Tanda de</span>
           <input
             type="number"
@@ -60,7 +65,7 @@ export function TandasBar({
           </button>
         </div>
       )}
-    </div>
+    </nav>
   );
 }
 

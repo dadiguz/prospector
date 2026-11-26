@@ -102,11 +102,11 @@ async function AjustesContent({ searchParams }: PageProps<"/ajustes">) {
           </table>
         )}
       </Fold>
-      <Fold title="Dónde están mis datos">
+      <Section title="Mis datos" aside={<a href="/api/exportar" download className="btn">Exportar todo</a>}>
         <p className="text-sm text-ink-2">
-          Base de datos y perfil en <code className="font-mono text-xs">{dataDir()}</code>. Respalda esa carpeta; no la subas a ningún repositorio.
+          <code className="font-mono text-xs">{dataDir()}</code>
         </p>
-      </Fold>
+      </Section>
     </div>
   );
 }
