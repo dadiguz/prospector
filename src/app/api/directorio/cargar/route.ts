@@ -1,24 +1,42 @@
 import { z } from "zod";
 import { connection } from "next/server";
 import { readProfile } from "@/lib/profile";
-import { MAX_ENTRADA, guardarCarga, tituloSugerido, agruparIdeas, clasificarGiros, clasificarTrozo, esMismoRubro, gruposPorGiro, leerEstructurado, normalizar, proyectosParaClasificar, trozos, type ClasGiro, type Registro } from "@/lib/carga";
+import {
+  MAX_ENTRADA, agregarACarga, guardarCarga, tituloSugerido, agruparIdeas, clasificarGiros, clasificarTrozo, esMismoRubro, gruposPorGiro,
+  leerEstructurado, normalizar, proyectosParaClasificar, trozos, type ClasGiro, type Registro,
+} from "@/lib/carga";
+import { descargarFuente } from "@/lib/carga-fuentes";
 
-const Body = z.object({ texto: z.string().min(5).max(15_000_000), titulo: z.string().trim().max(120).optional(), archivos: z.array(z.string().max(200)).max(50).optional() });
+const Body = z.object({
+  texto: z.string().max(15_000_000).optional(),
+  url: z.string().url().max(2000).optional(),
+  titulo: z.string().trim().max(120).optional(),
+  archivos: z.array(z.string().max(200)).max(50).optional(),
+  /** Si viene, lo nuevo se suma a esa carga en lugar de crear otra. */
+  cargaId: z.number().int().optional(),
+});
 
-/** Lee y clasifica una carga de correos. NDJSON: avance, registros e ideas. No guarda nada. */
+/** Lee (de texto o de una liga) y clasifica una carga de correos; la guarda en el historial. NDJSON con el avance. */
 export async function POST(req: Request) {
   await connection();
   const b = Body.safeParse(await req.json().catch(() => null));
-  if (!b.success) return Response.json({ error: "No hay datos para leer." }, { status: 400 });
+  if (!b.success || (!b.data.url && (b.data.texto ?? "").trim().length < 5)) return Response.json({ error: "No hay datos para leer." }, { status: 400 });
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(ctrl) {
       const send = (o: object) => ctrl.enqueue(enc.encode(JSON.stringify(o) + "\n"));
       try {
+        let texto = b.data.texto ?? "";
+        let archivos = (b.data.archivos ?? []).join(", ");
+        if (b.data.url) {
+          const d = await descargarFuente(b.data.url, (t) => send({ tipo: "actividad", texto: t }));
+          texto = d.texto;
+          archivos = d.archivo;
+        }
         const proyectos = proyectosParaClasificar();
         const empresa = readProfile()?.empresa ?? "";
         const slugs = new Set(proyectos.map((p) => p.slug));
-        const tabla = leerEstructurado(b.data.texto);
+        const tabla = leerEstructurado(texto);
         let crudos: Parameters<typeof normalizar>[0] = [];
         if (tabla) {
           // Datos con columnas: se lee directo y el modelo solo clasifica cada giro una vez.
@@ -49,8 +67,8 @@ export async function POST(req: Request) {
             return g.map((r) => ({ ...r, ...c, proyecto: c.proyecto === "ninguno" && !r.giro && !r.negocio ? "sin_info" : c.proyecto }));
           });
         } else {
-          const partes = trozos(b.data.texto);
-          send({ tipo: "inicio", total: partes.length, recortado: b.data.texto.length > MAX_ENTRADA });
+          const partes = trozos(texto);
+          send({ tipo: "inicio", total: partes.length, recortado: texto.length > MAX_ENTRADA });
           let hechos = 0;
           // De tres en tres para no saturar la API.
           for (let i = 0; i < partes.length; i += 3) {
@@ -74,14 +92,18 @@ export async function POST(req: Request) {
         }
         const sinProyecto = registros.filter((r) => r.proyecto === "ninguno" && !r.rebote);
         send({ tipo: "pensando" });
-        const archivos = (b.data.archivos ?? []).join(", ");
+        if (b.data.cargaId) {
+          const ideas = sinProyecto.length ? await agruparIdeas(sinProyecto, empresa, proyectos).catch(() => []) : [];
+          const n = agregarACarga(b.data.cargaId, registros, ideas);
+          send({ tipo: "agregado", id: b.data.cargaId, nuevos: n });
+          return;
+        }
         const [ideas, titulo] = await Promise.all([
           sinProyecto.length ? agruparIdeas(sinProyecto, empresa, proyectos).catch(() => []) : Promise.resolve([]),
-          b.data.titulo || tituloSugerido(b.data.texto, archivos),
+          b.data.titulo || tituloSugerido(texto.slice(0, 4000), archivos),
         ]);
         const id = guardarCarga(titulo, archivos, { registros, ideas, asignado: Object.fromEntries(registros.map((r) => [r.correo, r.proyecto])), agregados: [], segmentos: {} });
         send({ tipo: "guardado", id });
-        send({ tipo: "fin" });
       } catch (e) {
         send({ tipo: "error", error: e instanceof Error ? e.message : String(e) });
       } finally {

@@ -5,6 +5,7 @@ import { leerCarga } from "@/lib/carga";
 import { Cargar } from "../cargar";
 import { fechaCarga } from "../fecha";
 import { proyectosOpcion } from "../proyectos";
+import { AgenteCarga } from "../agente";
 
 async function Contenido({ params }: { params: Promise<{ id: string }> }) {
   await connection();
@@ -14,7 +15,8 @@ async function Contenido({ params }: { params: Promise<{ id: string }> }) {
   const { id: cid, titulo, archivos, creado_en, ...estado } = c;
   return (
     <Cargar
-      key={cid}
+      key={`${cid}:${estado.registros.length}`}
+      agente={<AgenteCarga cargaId={cid} />}
       proyectos={proyectosOpcion()}
       carga={{ id: cid, titulo, archivos, fecha: fechaCarga(creado_en) }}
       estadoInicial={JSON.parse(JSON.stringify(estado))}

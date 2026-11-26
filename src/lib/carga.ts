@@ -97,7 +97,8 @@ function filasCsv(t: string): Fila[] | null {
     else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && t[i + 1] === "\n") i++;
       fila.push(campo); campo = "";
-      if (fila.some((c) => c.trim())) filas.push(fila);
+      // Solo se guardan el encabezado y las filas con algún correo: los archivos del INEGI traen cientos de miles.
+      if (!filas.length ? fila.some((c) => c.trim()) : fila.some((c) => c.includes("@"))) filas.push(fila);
       fila = [];
     } else campo += ch;
   }
@@ -493,4 +494,20 @@ export function actualizarCarga(id: number, cambios: Partial<Pick<EstadoCarga, "
   if (cambios.titulo !== undefined) { sets.push("titulo = ?"); vals.push(cambios.titulo); }
   if (!sets.length) return;
   run(`UPDATE cargas SET ${sets.join(", ")}, actualizado_en = datetime('now') WHERE id = ?`, ...vals, id);
+}
+
+/** Suma registros nuevos a una carga que ya existe (sin repetir correos). */
+export function agregarACarga(id: number, nuevos: Registro[], ideas: IdeaProyecto[]): number {
+  const c = get<{ registros_json: string; ideas_json: string; asignado_json: string }>("SELECT registros_json, ideas_json, asignado_json FROM cargas WHERE id = ?", id);
+  if (!c) throw new Error("La carga ya no existe.");
+  const registros = JSON.parse(c.registros_json) as Registro[];
+  const asignado = JSON.parse(c.asignado_json) as Record<string, string>;
+  const vistos = new Set(registros.map((r) => r.correo));
+  const suma = nuevos.filter((r) => !vistos.has(r.correo));
+  for (const r of suma) asignado[r.correo] = r.proyecto;
+  run(
+    "UPDATE cargas SET registros_json = ?, asignado_json = ?, ideas_json = ?, total = ?, actualizado_en = datetime('now') WHERE id = ?",
+    JSON.stringify([...registros, ...suma]), JSON.stringify(asignado), JSON.stringify([...JSON.parse(c.ideas_json), ...ideas].slice(-8)), registros.length + suma.length, id,
+  );
+  return suma.length;
 }

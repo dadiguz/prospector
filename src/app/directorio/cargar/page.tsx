@@ -6,6 +6,7 @@ import { listarCargas } from "@/lib/carga";
 import { PageTitle } from "@/components/ui";
 import { fechaCarga } from "./fecha";
 import { ListaCargas } from "./lista";
+import { AgenteCarga } from "./agente";
 
 async function Contenido() {
   await connection();
@@ -20,6 +21,7 @@ export default function Cargas() {
         <PageTitle>Cargar datos</PageTitle>
         <Link href="/directorio/cargar/nueva" className="btn btn-primary mt-3"><Plus size={15} /> Nueva carga</Link>
       </div>
+      <AgenteCarga />
       <Suspense fallback={<p className="text-sm text-ink-3">Cargando…</p>}>
         <Contenido />
       </Suspense>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, FileUp, LoaderCircle, Search, Sparkles, X } from "lucide-react";
@@ -20,7 +20,7 @@ const pillCls = (on: boolean) => `inline-flex items-center gap-1 rounded-full bo
 export type Estado = { registros: Registro[]; ideas: Idea[]; asignado: Record<string, string>; agregados: string[]; segmentos?: Record<string, string> };
 export type CargaInfo = { id: number; titulo: string; fecha: string; archivos: string };
 
-export function Cargar({ proyectos: inicial, carga, estadoInicial }: { proyectos: ProyectoOpcion[]; carga?: CargaInfo; estadoInicial?: Estado }) {
+export function Cargar({ proyectos: inicial, carga, estadoInicial, agente }: { proyectos: ProyectoOpcion[]; carga?: CargaInfo; estadoInicial?: Estado; agente?: ReactNode }) {
   const router = useRouter();
   const [proyectos, setProyectos] = useState(inicial);
   const [texto, setTexto] = useState("");
@@ -253,6 +253,8 @@ export function Cargar({ proyectos: inicial, carga, estadoInicial }: { proyectos
           {repensando ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} Repensar ideas
         </button>
       </div>
+
+      {agente}
 
       {estado.ideas.length > 0 && (
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
