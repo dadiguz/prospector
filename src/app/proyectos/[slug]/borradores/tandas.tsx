@@ -65,7 +65,7 @@ export function TandasBar({
 }
 
 /** Panel de una tanda: nombre, imágenes, un cambio para todos y mandarla. */
-export function TandaPanel({ lote, listos, onElegir, puedeElegir }: { lote: Lote; listos: number; onElegir: () => void; puedeElegir: number }) {
+export function TandaPanel({ lote, listos, onElegir }: { lote: Lote; listos: number; onElegir: () => void }) {
   const router = useRouter();
   const [nombre, setNombre] = useState(lote.nombre);
   const [indicacion, setIndicacion] = useState("");
@@ -165,8 +165,8 @@ export function TandaPanel({ lote, listos, onElegir, puedeElegir }: { lote: Lote
         >
           Deshacer tanda
         </button>
-        <button type="button" className="btn btn-primary btn-sm" disabled={!listos || !puedeElegir} onClick={onElegir}>
-          Elegir {Math.min(listos, puedeElegir)} para mandar
+        <button type="button" className="btn btn-primary btn-sm" disabled={!listos} onClick={onElegir}>
+          Elegir {listos} para mandar
         </button>
       </div>
     </section>

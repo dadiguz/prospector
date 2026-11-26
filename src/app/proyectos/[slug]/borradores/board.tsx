@@ -13,7 +13,7 @@ import { TandaPanel, TandasBar, imgUrl, type Vista } from "./tandas";
 
 type Draft = { id: number; nombre: string; para: string | null; asunto: string; cuerpo: string; issues: Issue[]; score: number | null; pegas: string | null; cuando: string | null; tags: { id: number; nombre: string; color: string }[]; nuevo?: boolean; loteId: number | null };
 
-export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remitente: string; gmailConectado: boolean; etiqueta: string; tope: number; enviadosHoy: number; lotes: Lote[] }) {
+export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remitente: string; gmailConectado: boolean; etiqueta: string; enviadosHoy: number; lotes: Lote[] }) {
   const todos = props.drafts;
   const esListo = (d: Draft) => !d.issues.some((i) => i.nivel === "error") && !!d.para;
   const [vistaElegida, setVista] = useState<Vista>("todos");
@@ -30,7 +30,6 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
   const [state, setState] = useState<FormState>(null);
   const [pending, start] = useTransition();
   const chosen = drafts.filter((d) => sel.includes(d.id));
-  const restantes = Math.max(0, props.tope - props.enviadosHoy);
   const run = (fn: () => Promise<FormState>, clearOnOk = true) =>
     start(async () => {
       const r = await fn();
@@ -43,10 +42,10 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
       <div className="card mb-6 flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm">
         <span className="flex items-center gap-2 text-ink-2">
           <span><strong className="font-medium text-ink">{listos.length}</strong> de {drafts.length} listos para mandar</span>
-          <Info label="Envíos de hoy">Hoy llevas {props.enviadosHoy} de {props.tope} envíos (tope diario, en Ajustes). Un borrador está listo si tiene destinatario y no tiene errores.</Info>
+          <Info label="Envíos de hoy">Hoy llevas {props.enviadosHoy} envíos. Un borrador está listo si tiene destinatario y no tiene errores.</Info>
         </span>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-quiet" onClick={() => setSel(sel.length ? [] : listos.map((d) => d.id).slice(0, restantes))}>
+          <button type="button" className="btn btn-quiet" onClick={() => setSel(sel.length ? [] : listos.map((d) => d.id))}>
             {sel.length ? "Quitar selección" : "Elegir los listos"}
           </button>
           <button type="button" className="btn btn-primary" disabled={!sel.length} onClick={() => { setState(null); setConfirming(true); }}>
@@ -70,8 +69,7 @@ export function DraftsBoard(props: { projectId: number; drafts: Draft[]; remiten
           key={loteActual.id}
           lote={loteActual}
           listos={listos.length}
-          puedeElegir={restantes}
-          onElegir={() => setSel(listos.map((d) => d.id).slice(0, restantes))}
+          onElegir={() => setSel(listos.map((d) => d.id))}
         />
       )}
 

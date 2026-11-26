@@ -69,7 +69,6 @@ export async function saveSettings(_: FormState, fd: FormData): Promise<FormStat
   const current = readSettings();
   const parsed = SettingsSchema.safeParse({
     ...current,
-    topeDiario: Number(fd.get("topeDiario")),
     presupuestoBusquedaUsd: Number(fd.get("presupuestoBusquedaUsd")),
     busquedasWebPorCandidato: Number(fd.get("busquedasWebPorCandidato")),
     modoEconomico: fd.get("modoEconomico") === "on",
@@ -167,16 +166,11 @@ export async function discardDraft(messageId: number) {
 type BatchRow = { id: number; prospect_id: number; para: string; estado: string; validacion_json: string; nombre: string; asunto: string; cuerpo: string; gmail_draft_id: string | null };
 
 /**
- * Revisión previa a cualquier envío: tope diario, estado, validador, duplicados y lista de supresión.
+ * Revisión previa a cualquier envío: estado, validador, duplicados y lista de supresión.
  * Recibe exactamente la lista que el usuario vio (sección 9, "aprobación por lote").
  */
 function checkBatch(projectId: number, messageIds: number[]): { rows: BatchRow[] } | { error: string } {
-  const settings = readSettings();
   const ids = z.array(z.number().int()).min(1).parse(messageIds);
-  const hoy = get<{ c: number }>(
-    `SELECT COUNT(*) c FROM messages m JOIN prospects p ON p.id = m.prospect_id WHERE p.project_id = ? AND m.estado = 'enviado' AND date(m.enviado_en) = date('now','localtime')`,
-    projectId)!.c;
-  if (hoy + ids.length > settings.topeDiario) return { error: `Tope diario: ${settings.topeDiario}. Hoy van ${hoy}.` };
   const problems: string[] = [];
   const rows: BatchRow[] = [];
   for (const id of ids) {
@@ -546,8 +540,8 @@ export async function sendViaGmail(projectId: number, messageIds: number[], opts
   const verificar = opts.verificar ?? true;
   const profile = requireProfile();
   const check = checkBatch(projectId, messageIds);
-  // El tope diario detiene la tanda; lo demás (hilo previo, supresión, reglas) solo afecta a ese correo.
-  if ("error" in check) return { error: check.error, detener: check.error.startsWith("Tope diario") };
+  // Hilo previo, supresión o reglas solo afectan a ese correo.
+  if ("error" in check) return { error: check.error };
   const label = gmailLabel(projectId);
   const tanda = `Tanda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`;
   const enviados: string[] = [];

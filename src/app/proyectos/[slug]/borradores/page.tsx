@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getProject, listDrafts } from "@/lib/queries";
-import { readProfile, readSettings } from "@/lib/profile";
+import { readProfile } from "@/lib/profile";
 import { json } from "@/lib/db";
 import { PageTitle, Empty, TagFilter } from "@/components/ui";
 import { projectTags, tagsByProspect } from "@/lib/tags";
@@ -26,7 +26,6 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
   const tagMap = tagsByProspect(drafts.map((d) => d.prospect_id));
   const desde = lastSeen(project.id, "borradores");
   const profile = readProfile();
-  const settings = readSettings();
   const gmail = await gmailStatus();
   const cfg = json<{ gmail?: { etiqueta?: string } }>(project.config_json, {});
 
@@ -67,7 +66,6 @@ async function BorradoresContent({ params, searchParams }: PageProps<"/proyectos
           remitente={gmail.conectado ? gmail.email ?? "" : profile?.correo ?? ""}
           gmailConectado={gmail.conectado}
           etiqueta={cfg.gmail?.etiqueta ?? `Prospección/${project.nombre}`}
-          tope={settings.topeDiario}
           enviadosHoy={enviadosHoy}
         />
       )}

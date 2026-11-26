@@ -39,10 +39,6 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="label" htmlFor="topeDiario">Tope de correos por día</label>
-              <input id="topeDiario" name="topeDiario" type="number" min={1} max={200} className="input" defaultValue={settings.topeDiario} />
-            </div>
-            <div>
               <label className="label" htmlFor="presupuestoBusquedaUsd">Presupuesto por búsqueda (US$)</label>
               <input id="presupuestoBusquedaUsd" name="presupuestoBusquedaUsd" type="number" step="0.5" min={0.5} max={100} className="input" defaultValue={settings.presupuestoBusquedaUsd} />
             </div>

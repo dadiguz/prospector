@@ -11,7 +11,7 @@ type Estado = "pendiente" | "enviando" | "enviado" | "error" | "omitido";
  * Envío con avance: manda los correos uno por uno y muestra cuál va saliendo.
  * Cubre la pantalla para que no se haga otra cosa mientras tanto; se puede detener después del actual.
  * Si uno falla (hilo previo, supresión…) se salta y sigue; al final dice por qué no salió cada uno.
- * Solo se detiene la tanda cuando el problema es de todos (tope diario, Gmail desconectado o con límite).
+ * Solo se detiene la tanda cuando el problema es de todos (Gmail desconectado o con límite).
  */
 export function SendingModal({ projectId, items, onClose, send = sendViaGmail }: { projectId: number; items: Item[]; onClose: (enviados: number) => void; send?: typeof sendViaGmail }) {
   const [estados, setEstados] = useState<Record<number, Estado>>({});
