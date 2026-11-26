@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { startSearch } from "@/app/actions";
 import { toast } from "@/components/toaster";
 import { Field } from "@/components/wand-field";
+import { PAISES } from "@/lib/paises";
 
 /**
  * Lanzar una búsqueda para un segmento. Mientras haya una búsqueda de este segmento en curso o en cola,
@@ -30,7 +31,8 @@ export function SearchForm({ segmentId, segmento, defaultBudget, enCurso, contex
           }
           setLanzada(true);
           const canal = String(fd.get("canal"));
-          toast(`Búsqueda iniciada: ${segmento}${canal === "whatsapp" ? " · WhatsApp" : canal === "cualquiera" ? " · cualquier contacto" : ""}.`);
+          const pais = String(fd.get("pais"));
+          toast(`Búsqueda iniciada: ${segmento}${canal === "whatsapp" ? " · WhatsApp" : canal === "cualquiera" ? " · cualquier contacto" : ""}${pais !== "México" ? ` · ${pais}` : ""}.`);
           router.refresh();
           // Si el refresco trae el estado real, éste manda; el optimista se apaga solo.
           setTimeout(() => setLanzada(false), 8000);
@@ -43,6 +45,11 @@ export function SearchForm({ segmentId, segmento, defaultBudget, enCurso, contex
         <button type="button" className="mr-auto text-xs text-ink-3 hover:text-ink" onClick={() => setOpciones((o) => !o)} aria-expanded={opciones}>
           {opciones ? "Ocultar opciones" : `Opciones${indicaciones.trim() ? " · con indicaciones" : ""}`}
         </button>
+        <select name="pais" defaultValue="México" className="select" style={{ width: "10rem" }} disabled={ocupado} aria-label="País">
+          {PAISES.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
         <select name="canal" defaultValue="correo" className="select" style={{ width: "11rem" }} disabled={ocupado} aria-label="Tipo de contacto">
           <option value="correo">Con correo</option>
           <option value="whatsapp">Con WhatsApp</option>

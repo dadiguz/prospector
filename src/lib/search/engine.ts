@@ -10,6 +10,7 @@ import { currentWeights } from "../project-md";
 import { ensureRunTag, tagProspect } from "../tags";
 import { hookFigure } from "../hook-formula";
 import { detectEstado, domainOf, isFreeMail, mailboxType, norm } from "../text";
+import { esMexico, paisValido } from "../paises";
 
 /**
  * Motor de búsqueda reanudable (secciones 3.6 y 5).
@@ -77,7 +78,7 @@ function fichaSchema(weights: Weight[]) {
 }
 type FichaT = z.infer<ReturnType<typeof fichaSchema>> & { atributos: Record<string, boolean> };
 
-function projectContext(projectId: number, segmentId: number) {
+function projectContext(projectId: number, segmentId: number, pais = "México") {
   const p = get<{ nombre: string; propuesta_valor: string; config_json: string }>("SELECT nombre, propuesta_valor, config_json FROM projects WHERE id = ?", projectId)!;
   const seg = get<{ nombre: string; definicion: string; consultas_json: string }>("SELECT nombre, definicion, consultas_json FROM segments WHERE id = ?", segmentId)!;
   const weights: Weight[] = currentWeights(projectId);
@@ -87,7 +88,8 @@ function projectContext(projectId: number, segmentId: number) {
   const cfg = json<Record<string, unknown>>(p.config_json, {});
   return {
     p, seg, weights, dq, blocked, cfg,
-    excluidos: json<string[]>(terr?.excluidos_json, []),
+    pais,
+    excluidos: esMexico(pais) ? json<string[]>(terr?.excluidos_json, []) : [],
     text: `PROYECTO: ${p.nombre}
 ${p.propuesta_valor}
 
@@ -101,7 +103,7 @@ ${weights.map((w) => `- ${w.descripcion} (${w.peso > 0 ? "+" : ""}${w.peso})`).j
 DESCALIFICADORES:
 ${dq.map((d) => `- [${d.tipo}] ${d.regla}`).join("\n")}
 
-TERRITORIO: todo México excepto ${json<string[]>(terr?.excluidos_json, []).join(", ") || "nada"}.
+TERRITORIO: ${esMexico(pais) ? `todo México excepto ${json<string[]>(terr?.excluidos_json, []).join(", ") || "nada"}` : `solo ${pais}`}.
 
 FECHA DE HOY: ${new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}. Busca la siguiente edición o temporada (los próximos 3 a 12 meses); lo que ya pasó solo sirve como evidencia. En las consultas usa el año de la siguiente edición.`,
     investigacion: String(cfg.investigacion ?? ""),
@@ -136,7 +138,9 @@ const CANAL_PROMPT: Record<CanalBusqueda, { descubrir: string; investigar: strin
   },
 };
 
-export async function startSearchJob(segmentId: number, cuantos: number, presupuestoUsd: number, canal: CanalBusqueda = "correo", indicaciones = "") {
+export async function startSearchJob(segmentId: number, cuantos: number, presupuestoUsd: number, canal: CanalBusqueda = "correo", indicaciones = "", paisPedido = "México") {
+  const pais = paisValido(paisPedido);
+  const etiquetaPais = esMexico(pais) ? "" : ` · ${pais}`;
   if (!(await getSecret("anthropic_api_key"))) throw new NoApiKeyError();
   const seg = get<{ project_id: number; nombre: string }>("SELECT project_id, nombre FROM segments WHERE id = ?", segmentId);
   if (!seg) throw new Error("Segmento no encontrado");
@@ -145,18 +149,18 @@ export async function startSearchJob(segmentId: number, cuantos: number, presupu
     const runId = Number(
       run(
         "INSERT INTO search_runs (project_id, segment_id, etiqueta, algorithm_version_id, enfoque, pedidos, origen) VALUES (?, ?, ?, ?, ?, ?, 'busqueda')",
-        seg.project_id, segmentId, `Búsqueda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })} · ${seg.nombre}${CANAL_ETIQUETA[canal]}`, algo?.id ?? null, `${seg.nombre}${CANAL_ETIQUETA[canal]}`, cuantos,
+        seg.project_id, segmentId, `Búsqueda ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short" })} · ${seg.nombre}${CANAL_ETIQUETA[canal]}${etiquetaPais}`, algo?.id ?? null, `${seg.nombre}${CANAL_ETIQUETA[canal]}${etiquetaPais}`, cuantos,
       ).lastInsertRowid,
     );
     const id = Number(
       run("INSERT INTO jobs (project_id, tipo, search_run_id, presupuesto_json) VALUES (?, 'busqueda', ?, ?)",
-        seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, canal, indicaciones: indicaciones.trim().slice(0, 2000), maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
+        seg.project_id, runId, JSON.stringify({ usd: presupuestoUsd, cuantos, segmentId, canal, pais, indicaciones: indicaciones.trim().slice(0, 2000), maxCandidatos: Math.ceil(cuantos * 2) })).lastInsertRowid,
     );
     run("INSERT INTO job_steps (job_id, orden, tipo, clave) VALUES (?, 0, 'descubrir', 'descubrir')", id);
     ensureRunTag(runId);
     return id;
   });
-  audit("owner", "busqueda_iniciada", `job ${jobId}, segmento ${segmentId}, ${cuantos} sólidos, canal ${canal}, US$${presupuestoUsd}`);
+  audit("owner", "busqueda_iniciada", `job ${jobId}, segmento ${segmentId}, ${cuantos} sólidos, canal ${canal}, ${pais}, US$${presupuestoUsd}`);
   if (!startQueued()) logActivity(jobId, `En cola: hay ${maxSimultaneas()} búsquedas corriendo; empieza cuando termine una`);
   return jobId;
 }
@@ -188,8 +192,8 @@ function startQueued(): boolean {
 export async function repeatSearchJob(jobId: number) {
   const j = get<{ presupuesto_json: string }>("SELECT presupuesto_json FROM jobs WHERE id = ?", jobId);
   if (!j) throw new Error("Búsqueda no encontrada");
-  const b = json<{ usd: number; cuantos: number; segmentId: number; canal?: CanalBusqueda; indicaciones?: string }>(j.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0 });
-  return startSearchJob(b.segmentId, b.cuantos, b.usd, b.canal ?? "correo", b.indicaciones ?? "");
+  const b = json<{ usd: number; cuantos: number; segmentId: number; canal?: CanalBusqueda; indicaciones?: string; pais?: string }>(j.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0 });
+  return startSearchJob(b.segmentId, b.cuantos, b.usd, b.canal ?? "correo", b.indicaciones ?? "", b.pais ?? "México");
 }
 
 export function cancelJob(jobId: number) {
@@ -245,7 +249,7 @@ async function runJob(jobId: number) {
     for (;;) {
       const job = get<{ estado: string; project_id: number; search_run_id: number; presupuesto_json: string }>("SELECT * FROM jobs WHERE id = ?", jobId);
       if (!job || job.estado !== "en_curso") return;
-      const budget = json<{ usd: number; cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda; indicaciones?: string }>(job.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0, maxCandidatos: 20 });
+      const budget = json<{ usd: number; cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda; indicaciones?: string; pais?: string }>(job.presupuesto_json, { usd: 3, cuantos: 10, segmentId: 0, maxCandidatos: 20 });
       const canal = budget.canal ?? "correo";
       const gastado = get<{ s: number }>("SELECT COALESCE(SUM(costo_usd),0) s FROM usage_log WHERE job_id = ?", jobId)!.s;
       // "Listo" depende del canal pedido: correo verificado (lista A), WhatsApp, o cualquiera de los dos.
@@ -292,7 +296,7 @@ async function runJob(jobId: number) {
         const out =
           step.tipo === "descubrir"
             ? await stepDiscover(jobId, job.project_id, job.search_run_id, budget, json<{ ronda?: number }>(step.entrada_json, {}).ronda ?? 1)
-            : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }), canal, budget.indicaciones ?? "");
+            : await stepInvestigate(jobId, job.project_id, job.search_run_id, budget.segmentId, json(step.entrada_json, { nombre: "", sitio_web: null, ciudad: null, estado: null, por_que: "" }), canal, budget.indicaciones ?? "", budget.pais ?? "México");
         run("UPDATE job_steps SET estado = 'hecho', salida_json = ?, error = NULL, actualizado_en = datetime('now') WHERE id = ?", JSON.stringify(out), step.id);
       } catch (e) {
         if (e instanceof PausedError) {
@@ -330,10 +334,10 @@ async function stepDiscover(
   jobId: number,
   projectId: number,
   runId: number,
-  budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda; indicaciones?: string },
+  budget: { cuantos: number; segmentId: number; maxCandidatos: number; canal?: CanalBusqueda; indicaciones?: string; pais?: string },
   ronda = 1,
 ) {
-  const ctx = projectContext(projectId, budget.segmentId);
+  const ctx = projectContext(projectId, budget.segmentId, budget.pais ?? "México");
   const settings = readSettings();
   const pedidos = budget.cuantos * 3;
   // Lo ya encontrado en el proyecto, más lo que esta búsqueda ya propuso o descartó, para que proponga organizaciones nuevas.
@@ -366,7 +370,7 @@ async function stepDiscover(
     system: SYSTEM_RULES,
     prompt: `${ctx.text}
 
-Encuentra hasta ${pedidos} organizaciones candidatas para este segmento, en México, fuera de los estados excluidos.
+Encuentra hasta ${pedidos} organizaciones candidatas para este segmento, ${esMexico(ctx.pais) ? "en México, fuera de los estados excluidos" : `solo en ${ctx.pais}`}.
 ${CANAL_PROMPT[budget.canal ?? "correo"].descubrir}
 ${budget.indicaciones ? `INDICACIONES DEL USUARIO PARA ESTA BÚSQUEDA (síguelas; tienen prioridad sobre las sugerencias del segmento, no sobre las reglas): ${budget.indicaciones}` : ""}
 ${ANGULOS[ronda - 1] ?? ANGULOS[ANGULOS.length - 1]}
@@ -439,8 +443,9 @@ async function stepInvestigate(
   cand: { nombre: string; sitio_web: string | null; ciudad: string | null; estado: string | null; por_que: string },
   canal: CanalBusqueda = "correo",
   indicaciones = "",
+  pais = "México",
 ) {
-  const ctx = projectContext(projectId, segmentId);
+  const ctx = projectContext(projectId, segmentId, pais);
   const settings = readSettings();
   const res = await research({
     tier: "medio",

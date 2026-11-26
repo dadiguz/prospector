@@ -439,7 +439,7 @@ export async function startSearch(_: FormState, fd: FormData): Promise<FormState
   const c = String(fd.get("canal") ?? "correo");
   const canal: CanalBusqueda = c === "whatsapp" || c === "cualquiera" ? c : "correo";
   try {
-    await startSearchJob(segmentId, cuantos, presupuesto, canal, String(fd.get("indicaciones") ?? ""));
+    await startSearchJob(segmentId, cuantos, presupuesto, canal, String(fd.get("indicaciones") ?? ""), String(fd.get("pais") ?? "México"));
   } catch (e) {
     return { error: (e as Error).message };
   }
